@@ -16,6 +16,7 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 	switch msg.Type {
 	case "__disconnect__":
 		playerID, _ := msg.Payload["playerId"].(string)
+		sessionToken, _ := msg.Payload["sessionToken"].(string)
 		if p := r.Engine.FindPlayer(playerID); p != nil {
 			p.IsConnected = false
 			r.Engine.AppendLog(p.Name + " সংযোগ বিচ্ছিন্ন হয়েছেন।")
@@ -23,12 +24,16 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 			r.emitState()
 			// Reconnection window (§11); on expiry the seat is freed and a
 			// stuck turn is forfeited so the game never stalls.
+			// The timeout carries its own payload because it runs with no
+			// client attached — the handler must never touch c here.
 			go func() {
 				time.Sleep(store.ReconnectTTL)
 				select {
 				case r.actions <- inboundAction{msg: models.Message{
-					Type:    "__reconnect_timeout__",
-					Payload: map[string]any{"playerId": playerID},
+					Type: "__reconnect_timeout__",
+					Payload: map[string]any{
+						"playerId": playerID, "sessionToken": sessionToken,
+					},
 				}}:
 				case <-r.quit:
 				}
@@ -39,7 +44,9 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 	case "__reconnect_timeout__":
 		playerID, _ := msg.Payload["playerId"].(string)
 		if p := r.Engine.FindPlayer(playerID); p != nil && !p.IsConnected {
-			_ = r.hub.sessions.Delete(context.Background(), c.sessionToken)
+			if token, _ := msg.Payload["sessionToken"].(string); token != "" {
+				_ = r.hub.sessions.Delete(context.Background(), token)
+			}
 			if r.Engine.ForfeitTurn(playerID) {
 				r.Engine.AppendLog(p.Name + " সময়মতো ফিরে না আসায় চাল বাতিল হয়েছে।")
 			}

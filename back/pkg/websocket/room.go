@@ -74,6 +74,13 @@ func (r *Room) Run() {
 
 // Submit queues a client message for the event loop.
 func (r *Room) Submit(c *Client, msg models.Message) {
+	// Internal actions (__disconnect__, __reconnect_timeout__) are queued by
+	// the room itself — never accept them from sockets, or any client could
+	// knock other players offline by spoofing them.
+	if len(msg.Type) >= 2 && msg.Type[0] == '_' && msg.Type[1] == '_' {
+		c.sendError("UNKNOWN_ACTION", "অজানা অ্যাকশন।", msg.RequestID)
+		return
+	}
 	select {
 	case r.actions <- inboundAction{client: c, msg: msg}:
 	default:
@@ -243,9 +250,14 @@ func (r *Room) handleDisconnect(c *Client) {
 		return
 	}
 	// Run the state mutation through the event loop to avoid races.
+	// The session token travels in the payload: the timeout that follows
+	// runs with no client attached, so the handler cannot read it off c.
 	select {
 	case r.actions <- inboundAction{client: &Client{}, msg: models.Message{
-		Type: "__disconnect__", Payload: map[string]any{"playerId": c.playerID},
+		Type: "__disconnect__",
+		Payload: map[string]any{
+			"playerId": c.playerID, "sessionToken": c.sessionToken,
+		},
 	}}:
 		// queued
 	case <-time.After(time.Second):
