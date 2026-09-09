@@ -163,11 +163,11 @@
 		}
 		// Recent events, one per line, so the game is easy to follow.
 		const recent = (gs?.logs ?? []).slice(-3);
-		recent.forEach((line, i) => {
-			fitFont(ctx, line, 14, 440);
-			ctx.fillStyle = i === recent.length - 1 ? '#334155' : '#94a3b8';
-			ctx.fillText(line, centerX, centerY + 58 + i * 22);
-		});
+			recent.forEach((line, i) => {
+				fitFont(ctx, line, 20, 440);
+				ctx.fillStyle = i === recent.length - 1 ? '#334155' : '#94a3b8';
+				ctx.fillText(line, centerX, centerY + 58 + i * 28);
+			});
 	}
 
 	onMount(() => {

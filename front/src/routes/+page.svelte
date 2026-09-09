@@ -36,23 +36,23 @@
 		</header>
 
 		<div class="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[1fr_320px]">
-			<div>
+			<div class="order-1">
 				<BoardCanvas onselect={(id) => (selectedTile = id)} />
-				{#if gameStore.gameState}
-					<div class="mt-4 rounded-2xl bg-white p-4 shadow">
-						<h2 class="mb-1 font-semibold">খেলার লগ</h2>
-						<ul class="max-h-32 space-y-0.5 overflow-y-auto text-sm text-gray-700">
-							{#each [...gameStore.gameState.logs].reverse().slice(0, 20) as log}
-								<li>{log}</li>
-							{/each}
-						</ul>
-					</div>
-				{/if}
 			</div>
-			<div class="flex flex-col gap-4">
+			<div class="order-2 flex flex-col gap-4 lg:col-start-2 lg:row-span-2">
 				<PlayerList />
 				<ActionPanel />
 			</div>
+			{#if gameStore.gameState}
+				<div class="order-3 rounded-2xl bg-white p-4 shadow lg:col-start-1">
+					<h2 class="mb-1 font-semibold">খেলার লগ</h2>
+					<ul class="max-h-32 space-y-0.5 overflow-y-auto text-sm text-gray-700">
+						{#each [...gameStore.gameState.logs].reverse().slice(0, 20) as log}
+							<li>{log}</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
 		</div>
 	{/if}
 
