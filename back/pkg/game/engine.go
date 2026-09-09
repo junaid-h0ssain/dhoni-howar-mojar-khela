@@ -276,6 +276,21 @@ func (e *GameEngine) sendToJail(p *models.Player, o *Outcome, reason string) {
 	e.AppendLog(fmt.Sprintf("%s %s জেলে গেছেন।", p.Name, reason))
 }
 
+// allPropertiesSold reports whether every purchasable tile (properties,
+// utilities, railroads) has an owner. House/hotel building stays locked
+// until the whole board is sold.
+func (e *GameEngine) allPropertiesSold() bool {
+	for _, t := range e.State.Tiles {
+		switch t.Type {
+		case models.TileProperty, models.TileUtility, models.TileRailroad:
+			if t.OwnerID == "" {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // ownsFullGroup reports whether playerID owns every PROPERTY tile of group.
 func (e *GameEngine) ownsFullGroup(playerID, group string) bool {
 	want, ok := GroupSizes()[group]

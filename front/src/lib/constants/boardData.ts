@@ -106,5 +106,5 @@ export const GROUP_COLORS: Record<string, string> = {
 	green: '#22c55e',
 	darkblue: '#2563eb',
 	railroad: '#a8a29e',
-	utility: '#fbbf24'
+	utility: '#000000'
 };

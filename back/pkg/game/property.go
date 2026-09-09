@@ -40,7 +40,10 @@ func (e *GameEngine) BuyProperty(playerID string, tileID int) (*Outcome, error) 
 }
 
 // BuildHouse adds a house (0-3→+1) or hotel (4→5) on a player-owned tile.
-// Requires a complete color group, even building across the group, and cash.
+// Houses 1-4 build up one level at a time, then the 5th level is a hotel
+// (the max). Building unlocks only after every purchasable tile on the
+// board is sold. Requires a complete color group, even building across
+// the group, and cash.
 func (e *GameEngine) BuildHouse(playerID string, tileID int) (*Outcome, error) {
 	p, err := e.requireTurn(playerID, models.PhaseAction)
 	if err != nil {
@@ -55,6 +58,9 @@ func (e *GameEngine) BuildHouse(playerID string, tileID int) (*Outcome, error) {
 	}
 	if t.OwnerID != p.ID {
 		return nil, errEngine("NOT_YOUR_PROPERTY", "এই সম্পত্তি আপনার নয়।")
+	}
+	if !e.allPropertiesSold() {
+		return nil, errEngine("BOARD_NOT_SOLD_OUT", "সব সম্পত্তি বিক্রি হওয়ার আগে বাড়ি/হোটেল তৈরি করা যাবে না।")
 	}
 	if !e.ownsFullGroup(p.ID, t.Group) {
 		return nil, errEngine("NO_FULL_GROUP", "পুরো গ্রুপের মালিক না হলে বাড়ি তৈরি করা যায় না।")

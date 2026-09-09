@@ -252,11 +252,33 @@ func TestTaxAndBankruptcyToWin(t *testing.T) {
 }
 
 func TestBuildHouseRules(t *testing.T) {
-	e, host, _ := newStartedEngine(9)
+	e, host, guest := newStartedEngine(9)
 	e.State.TurnPhase = models.PhaseAction
-	// Partial group -> refuse.
+	// Building is locked until every purchasable tile is sold.
 	e.State.Tiles[11].OwnerID = host.ID
 	host.Position = 11
+	if _, err := e.BuildHouse(host.ID, 11); err == nil {
+		t.Fatal("expected BOARD_NOT_SOLD_OUT")
+	} else {
+		mustErrCode(t, err, "BOARD_NOT_SOLD_OUT")
+	}
+	// Sell out the board but keep the pink group split: host holds 11,
+	// guest holds 13/14 -> still no full group.
+	for id, tl := range e.State.Tiles {
+		switch tl.Type {
+		case models.TileProperty, models.TileUtility, models.TileRailroad:
+			if tl.OwnerID == "" {
+				if id == 13 || id == 14 {
+					tl.OwnerID = guest.ID
+				} else {
+					tl.OwnerID = host.ID
+				}
+			}
+		}
+	}
+	e.State.Tiles[13].OwnerID = guest.ID
+	e.State.Tiles[14].OwnerID = guest.ID
+	// Partial group -> refuse.
 	if _, err := e.BuildHouse(host.ID, 11); err == nil {
 		t.Fatal("expected NO_FULL_GROUP")
 	} else {
