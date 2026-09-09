@@ -40,10 +40,9 @@ func NewBoard() map[int]*models.Tile {
 		{19, "চকবাজার", "Chakbazar", 200, 100, "orange"},
 		{21, "জিইসি", "GEC", 220, 150, "red"},
 		{23, "বাটালি হিল", "Batali Hill", 220, 150, "red"},
-		// NOTE(plan §2.1): spec lists দেওয়ানহাট at ৳140 which breaks the
-		// red-group curve (220/220/140). Using ৳240 to match the classic
-		// 220/220/240 progression. Revisit if 140 was intentional.
-		{24, "দেওয়ানহাট", "Dewanhat", 240, 150, "red"},
+		// Plan §2.1 prices Dewanhat at ৳140 (red group: 220/220/140) —
+		// kept exactly as specified.
+		{24, "দেওয়ানহাট", "Dewanhat", 140, 150, "red"},
 		{26, "হালিশহর", "Halishahar", 260, 150, "yellow"},
 		{27, "অলংকার", "Alankar", 260, 150, "yellow"},
 		{29, "আগ্রাবাদ", "Agrabad", 280, 150, "yellow"},

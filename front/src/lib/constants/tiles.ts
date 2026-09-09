@@ -54,7 +54,7 @@ export const BOARD_TILES: Tile[] = [
 	prop(21, 'জিইসি', 'GEC', 220, 150, 'red', 18),
 	{ id: 22, nameBn: 'ভাগ্য পরীক্ষা', nameEn: 'Chance', type: 'CHANCE', houses: 0, isMortgaged: false },
 	prop(23, 'বাটালি হিল', 'Batali Hill', 220, 150, 'red', 18),
-	prop(24, 'দেওয়ানহাট', 'Dewanhat', 240, 150, 'red', 18),
+	prop(24, 'দেওয়ানহাট', 'Dewanhat', 140, 150, 'red', 18),
 	{ id: 25, nameBn: 'ষোলশহর স্টেশন', nameEn: 'Sholoshahar Station', type: 'RAILROAD', price: 200, group: 'railroad', houses: 0, isMortgaged: false },
 	prop(26, 'হালিশহর', 'Halishahar', 260, 150, 'yellow', 22),
 	prop(27, 'অলংকার', 'Alankar', 260, 150, 'yellow', 22),

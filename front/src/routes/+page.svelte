@@ -37,7 +37,7 @@
 
 		<div class="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[1fr_320px]">
 			<div>
-				<BoardCanvas />
+				<BoardCanvas onselect={(id) => (selectedTile = id)} />
 				{#if gameStore.gameState}
 					<div class="mt-4 rounded-2xl bg-white p-4 shadow">
 						<h2 class="mb-1 font-semibold">খেলার লগ</h2>

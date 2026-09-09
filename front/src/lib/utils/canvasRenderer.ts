@@ -22,9 +22,10 @@ export function tileRect(id: number): TileRect {
 	const t = ((id % 40) + 40) % 40;
 	if (t <= 10) {
 		// Bottom row: GO(0) bottom-right → Jail(10) bottom-left.
+		// Tiles run right-to-left away from GO, so tile 1 sits just left of GO.
 		if (t === 0) return { x: BOARD_SIZE - CORNER, y: BOARD_SIZE - CORNER, w: CORNER, h: CORNER };
 		if (t === 10) return { x: 0, y: BOARD_SIZE - CORNER, w: CORNER, h: CORNER };
-		const i = 10 - t; // 1..9 distance from right corner
+		const i = t; // 1..9 distance from the GO corner
 		return { x: BOARD_SIZE - CORNER - i * EDGE, y: BOARD_SIZE - CORNER, w: EDGE, h: CORNER };
 	}
 	if (t <= 20) {

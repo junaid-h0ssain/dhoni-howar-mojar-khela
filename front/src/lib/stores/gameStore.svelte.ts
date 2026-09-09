@@ -34,6 +34,14 @@ class GameStore {
 			this.gameState?.status === 'IN_GAME' &&
 			this.gameState?.turnPhase === 'ACTION'
 	);
+	// END_TURN phase (e.g. after landing in jail) still needs an action:
+	// the current player must be able to pass the turn.
+	canEndTurn = $derived(
+		this.isMyTurn &&
+			this.gameState?.status === 'IN_GAME' &&
+			(this.gameState?.turnPhase === 'ACTION' ||
+				this.gameState?.turnPhase === 'END_TURN')
+	);
 
 	reset() {
 		this.gameState = null;
