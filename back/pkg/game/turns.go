@@ -72,14 +72,15 @@ func (e *GameEngine) RollDice(playerID string) (*Outcome, error) {
 	return o, nil
 }
 
-// AutoEndIfNoAction advances a completed roll when the player has no legal
-// purchase or building choice. The room calls this after broadcasting a roll.
+// AutoEndIfNoAction advances a completed roll when the player has no purchase
+// available on the tile they stand on. The room calls this after a roll, buy,
+// or build, before broadcasting the state.
 func (e *GameEngine) AutoEndIfNoAction(playerID string, o *Outcome) {
 	if e.State.Status != models.StatusInGame || e.State.CurrentTurnPlayerID != playerID || e.State.TurnPhase != models.PhaseAction {
 		return
 	}
 	p := e.FindPlayer(playerID)
-	if p == nil || e.hasAvailableAction(p) {
+	if p == nil || e.canBuyLandedTile(p) {
 		return
 	}
 	e.AppendLog(fmt.Sprintf("%s-এর আর কোনো কাজ নেই — দান শেষ হয়েছে।", p.Name))
@@ -87,27 +88,19 @@ func (e *GameEngine) AutoEndIfNoAction(playerID string, o *Outcome) {
 	o.TurnAdvanced = true
 }
 
-// hasAvailableAction reports whether the player can make a meaningful choice
-// after landing. Ending a turn is not considered an action here.
-func (e *GameEngine) hasAvailableAction(p *models.Player) bool {
-	for _, t := range e.State.Tiles {
-		if t.OwnerID == "" && (t.Type == models.TileProperty || t.Type == models.TileUtility || t.Type == models.TileRailroad) && p.Position == t.ID && p.Cash >= t.Price {
-			return true
-		}
+// canBuyLandedTile reports whether the player can buy the tile they stand on.
+// Only the landed tile blocks auto-advance: build options elsewhere must not
+// hold the turn, because they exist on nearly every late-game turn and would
+// stall every landing in ACTION awaiting a manual End Turn. Building stays
+// available through the explicit BUILD_HOUSE action.
+func (e *GameEngine) canBuyLandedTile(p *models.Player) bool {
+	t := e.State.Tiles[p.Position]
+	if t == nil || t.OwnerID != "" || p.Cash < t.Price {
+		return false
 	}
-	for _, t := range e.State.Tiles {
-		if t.Type != models.TileProperty || t.OwnerID != p.ID || t.Houses >= 5 || p.Cash < t.HouseCost || !e.ownsFullGroup(p.ID, t.Group) {
-			continue
-		}
-		min := 5
-		for _, groupTile := range e.State.Tiles {
-			if groupTile.Type == models.TileProperty && groupTile.Group == t.Group && groupTile.OwnerID == p.ID && groupTile.Houses < min {
-				min = groupTile.Houses
-			}
-		}
-		if t.Houses == min {
-			return true
-		}
+	switch t.Type {
+	case models.TileProperty, models.TileUtility, models.TileRailroad:
+		return true
 	}
 	return false
 }
