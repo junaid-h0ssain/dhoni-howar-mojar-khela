@@ -63,6 +63,9 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 			return true
 		}
 		o, err := r.Engine.BuyProperty(c.playerID, tileID)
+		if err == nil {
+			r.Engine.AutoEndIfNoAction(c.playerID, o)
+		}
 		r.finishEngineCall(c, msg, o, err)
 		return true
 
@@ -73,6 +76,9 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 			return true
 		}
 		o, err := r.Engine.BuildHouse(c.playerID, tileID)
+		if err == nil {
+			r.Engine.AutoEndIfNoAction(c.playerID, o)
+		}
 		r.finishEngineCall(c, msg, o, err)
 		return true
 

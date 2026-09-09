@@ -35,7 +35,8 @@ func (e *GameEngine) RollDice(playerID string) (*Outcome, error) {
 	e.State.Dice = [2]int{d1, d2}
 	o.Rolled = true
 	o.Dice = [2]int{d1, d2}
-	o.Doubles = d1 == d2
+	// Only double six grants an extra roll. Other matching dice are ordinary rolls.
+	o.Doubles = d1 == 6 && d2 == 6
 	e.AppendLog(fmt.Sprintf("%s পাশা ফেলেছেন: %d + %d", p.Name, d1, d2))
 
 	if p.InJail {
@@ -61,7 +62,7 @@ func (e *GameEngine) RollDice(playerID string) (*Outcome, error) {
 			e.sendToJail(p, o, "তিনবার জোড়া পাশা ফেলে")
 			return o, nil
 		}
-		// Doubles: roll again immediately (buying can wait for a later ACTION).
+		// Double six: roll again immediately (buying can wait for a later ACTION).
 		e.State.TurnPhase = models.PhaseRoll
 		e.AppendLog(fmt.Sprintf("%s জোড়া পেয়েছেন — আবার দান চালুন!", p.Name))
 		return o, nil

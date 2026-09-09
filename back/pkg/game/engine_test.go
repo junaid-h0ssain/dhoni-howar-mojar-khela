@@ -324,7 +324,7 @@ func TestBuildHouseRules(t *testing.T) {
 
 func TestDoublesRollAgainAndTripleToJail(t *testing.T) {
 	e, host, _ := newStartedEngine(10)
-	e.SetFixedDice([][2]int{{2, 2}, {3, 3}, {4, 4}})
+	e.SetFixedDice([][2]int{{6, 6}, {6, 6}, {6, 6}})
 	o1, err := e.RollDice(host.ID)
 	if err != nil || !o1.Doubles || e.State.TurnPhase != models.PhaseRoll {
 		t.Fatalf("doubles should re-roll: %+v err=%v phase=%s", o1, err, e.State.TurnPhase)

@@ -26,7 +26,7 @@ type card struct {
 
 // Chance — ভাগ্য পরীক্ষা.
 var chanceCards = []card{
-	{text: "শুরুর ঘরে এগিয়ে যান। +৳200", kind: cardMoveTo, amount: 0},
+	{text: "যাত্রা শুরুর ঘরে এগিয়ে যান। +৳200", kind: cardMoveTo, amount: 0},
 	{text: "জেলে যান।", kind: cardGoToJail},
 	{text: "ব্যাংক লভ্যাংশ দিল: +৳100", kind: cardCash, amount: 100},
 	{text: "হাসপাতালের বিল: -৳50", kind: cardCash, amount: -50},
@@ -48,7 +48,7 @@ var chestCards = []card{
 	{text: "জেলে যান।", kind: cardGoToJail},
 	{text: "ব্যাংকের সুদ +৳25।", kind: cardCash, amount: 25},
 	{text: "স্কুল ফি -৳150।", kind: cardCash, amount: -150},
-	{text: "শুরুর ঘরে ফিরুন। +৳200", kind: cardMoveTo, amount: 0},
+	{text: "যাত্রা শুরুর ঘরে ফিরুন। +৳200", kind: cardMoveTo, amount: 0},
 	{text: "জন্মদিনের উপহার +৳75।", kind: cardCash, amount: 75},
 	{text: "সঞ্চয় বোনাস +৳50।", kind: cardCash, amount: 50},
 	{text: "চিকিৎসা খরচ -৳100।", kind: cardCash, amount: -100},
@@ -102,7 +102,7 @@ func (e *GameEngine) applyCard(p *models.Player, c card, deck string, diceTotal,
 		if p.Position < from || p.Position == 0 {
 			p.Cash += GoSalary
 			o.PassedGo = true
-			e.AppendLog(fmt.Sprintf("%s শুরু ঘর পার হয়ে ৳%d পেয়েছেন।", p.Name, GoSalary))
+			e.AppendLog(fmt.Sprintf("%s যাত্রা শুরু ঘর পার হয়ে ৳%d পেয়েছেন।", p.Name, GoSalary))
 		}
 		if depth < 3 {
 			e.resolveLanding(p, diceTotal, depth+1, o)

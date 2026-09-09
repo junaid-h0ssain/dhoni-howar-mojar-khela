@@ -110,7 +110,7 @@ func NewBoard() map[int]*models.Tile {
 	}
 
 	special := map[int]models.Tile{
-		0:  {ID: 0, NameBn: "শুরু", NameEn: "GO", Type: models.TileGo},
+		0:  {ID: 0, NameBn: "যাত্রা শুরু", NameEn: "GO", Type: models.TileGo},
 		2:  {ID: 2, NameBn: "সুযোগ গ্রহণ", NameEn: "Community Chest", Type: models.TileChest},
 		4:  {ID: 4, NameBn: "আয়কর", NameEn: "Income Tax", Type: models.TileTax, Price: 200},
 		7:  {ID: 7, NameBn: "ভাগ্য পরীক্ষা", NameEn: "Chance", Type: models.TileChance},
