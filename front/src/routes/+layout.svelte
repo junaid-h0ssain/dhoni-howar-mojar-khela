@@ -5,5 +5,14 @@
 	let { children } = $props();
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head>
+	<link rel="icon" href={favicon} />
+	<title>মহাজনি — বাংলাদেশের মনোপলি</title>
+</svelte:head>
 {@render children()}
+
+<style>
+	:global(body) {
+		font-family: 'Hind Siliguri', 'Kalpurush', system-ui, sans-serif;
+	}
+</style>
