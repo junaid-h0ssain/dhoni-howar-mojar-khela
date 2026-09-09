@@ -71,6 +71,46 @@ func (e *GameEngine) RollDice(playerID string) (*Outcome, error) {
 	return o, nil
 }
 
+// AutoEndIfNoAction advances a completed roll when the player has no legal
+// purchase or building choice. The room calls this after broadcasting a roll.
+func (e *GameEngine) AutoEndIfNoAction(playerID string, o *Outcome) {
+	if e.State.Status != models.StatusInGame || e.State.CurrentTurnPlayerID != playerID || e.State.TurnPhase != models.PhaseAction {
+		return
+	}
+	p := e.FindPlayer(playerID)
+	if p == nil || e.hasAvailableAction(p) {
+		return
+	}
+	e.AppendLog(fmt.Sprintf("%s-এর আর কোনো কাজ নেই — দান শেষ হয়েছে।", p.Name))
+	e.advanceTurn()
+	o.TurnAdvanced = true
+}
+
+// hasAvailableAction reports whether the player can make a meaningful choice
+// after landing. Ending a turn is not considered an action here.
+func (e *GameEngine) hasAvailableAction(p *models.Player) bool {
+	for _, t := range e.State.Tiles {
+		if t.OwnerID == "" && (t.Type == models.TileProperty || t.Type == models.TileUtility || t.Type == models.TileRailroad) && p.Position == t.ID && p.Cash >= t.Price {
+			return true
+		}
+	}
+	for _, t := range e.State.Tiles {
+		if t.Type != models.TileProperty || t.OwnerID != p.ID || t.Houses >= 5 || p.Cash < t.HouseCost || !e.ownsFullGroup(p.ID, t.Group) {
+			continue
+		}
+		min := 5
+		for _, groupTile := range e.State.Tiles {
+			if groupTile.Type == models.TileProperty && groupTile.Group == t.Group && groupTile.OwnerID == p.ID && groupTile.Houses < min {
+				min = groupTile.Houses
+			}
+		}
+		if t.Houses == min {
+			return true
+		}
+	}
+	return false
+}
+
 // rollInJail handles ROLL_DICE while imprisoned: doubles escape free,
 // otherwise the stay counter grows; on the 3rd failed attempt the ৳50 fine
 // is auto-paid and the player moves.

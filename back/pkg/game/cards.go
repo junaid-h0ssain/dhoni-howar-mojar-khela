@@ -34,6 +34,10 @@ var chanceCards = []card{
 	{text: "পুরস্কার পেলেন: +৳50", kind: cardCash, amount: 50},
 	{text: "৩ ঘর পিছিয়ে যান।", kind: cardMoveBack, amount: 3},
 	{text: "রাস্তা মেরামত খরচ: -৳100", kind: cardCash, amount: -100},
+	{text: "সম্পত্তি বিক্রির পুরস্কার: +৳150", kind: cardCash, amount: 150},
+	{text: "চট্টগ্রাম বন্দরে যান।", kind: cardMoveTo, amount: 15},
+	{text: "ভ্রমণ ভাতা পেলেন: +৳75", kind: cardCash, amount: 75},
+	{text: "জরুরি মেরামত খরচ: -৳75", kind: cardCash, amount: -75},
 }
 
 // Community Chest — সুযোগ গ্রহণ.
@@ -46,16 +50,28 @@ var chestCards = []card{
 	{text: "স্কুল ফি -৳150।", kind: cardCash, amount: -150},
 	{text: "শুরুর ঘরে ফিরুন। +৳200", kind: cardMoveTo, amount: 0},
 	{text: "জন্মদিনের উপহার +৳75।", kind: cardCash, amount: 75},
+	{text: "সঞ্চয় বোনাস +৳50।", kind: cardCash, amount: 50},
+	{text: "চিকিৎসা খরচ -৳100।", kind: cardCash, amount: -100},
+	{text: "চট্টগ্রাম জংশনে যান।", kind: cardMoveTo, amount: 25},
+	{text: "স্থানীয় কর ফেরত +৳80।", kind: cardCash, amount: 80},
 }
 
 func (e *GameEngine) drawChance(p *models.Player, diceTotal, depth int, o *Outcome) {
-	c := chanceCards[e.chanceDeck[e.chancePos%len(e.chanceDeck)]]
+	if e.chancePos >= len(e.chanceDeck) {
+		e.chanceDeck = shuffledDeck(len(chanceCards), e.rng)
+		e.chancePos = 0
+	}
+	c := chanceCards[e.chanceDeck[e.chancePos]]
 	e.chancePos++
 	e.applyCard(p, c, "ভাগ্য পরীক্ষা", diceTotal, depth, o)
 }
 
 func (e *GameEngine) drawChest(p *models.Player, diceTotal, depth int, o *Outcome) {
-	c := chestCards[e.chestDeck[e.chestPos%len(e.chestDeck)]]
+	if e.chestPos >= len(e.chestDeck) {
+		e.chestDeck = shuffledDeck(len(chestCards), e.rng)
+		e.chestPos = 0
+	}
+	c := chestCards[e.chestDeck[e.chestPos]]
 	e.chestPos++
 	e.applyCard(p, c, "সুযোগ গ্রহণ", diceTotal, depth, o)
 }

@@ -50,6 +50,9 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 
 	case models.ActRollDice:
 		o, err := r.Engine.RollDice(c.playerID)
+		if err == nil {
+			r.Engine.AutoEndIfNoAction(c.playerID, o)
+		}
 		r.finishEngineCall(c, msg, o, err)
 		return true
 
