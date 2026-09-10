@@ -7,7 +7,7 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<title>মহাজনি — বাংলাদেশের মনোপলি</title>
+	<title>ধনী হওয়ার মজার খেলা</title>
 </svelte:head>
 {@render children()}
 

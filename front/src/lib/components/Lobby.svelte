@@ -29,8 +29,8 @@
 </script>
 
 <div class="mx-auto max-w-md space-y-6 rounded-2xl bg-white p-6 shadow-lg">
-	<h1 class="text-center text-3xl font-bold">মহাজনি</h1>
-	<p class="text-center text-sm text-gray-500">বাংলাদেশের মনোপলি — বন্ধুদের সাথে অনলাইনে খেলুন</p>
+	<h1 class="text-center text-3xl font-bold">ধনী হওয়ার মজার খেলা</h1>
+	<p class="text-center text-sm text-gray-500">ধনী হওয়ার মজার খেলা — বন্ধুদের সাথে অনলাইনে খেলুন</p>
 
 	<label class="block">
 		<span class="mb-1 block text-sm font-medium">আপনার নাম</span>

@@ -20,7 +20,7 @@
 		</div>
 	{:else}
 		<header class="mx-auto mb-4 flex max-w-6xl flex-wrap items-center justify-between gap-2">
-			<h1 class="text-2xl font-bold">মহাজনি</h1>
+			<h1 class="text-2xl font-bold">ধনী হওয়ার মজার খেলা</h1>
 			{#if gameStore.roomCode}
 				<button
 					class="rounded-lg bg-white px-3 py-1 font-mono text-lg shadow"

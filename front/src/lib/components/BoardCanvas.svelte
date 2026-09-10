@@ -196,7 +196,7 @@
 		ctx.textAlign = 'center';
 		ctx.fillStyle = '#0f172a';
 		ctx.font = `bold 40px ${FONT_FAMILY}`;
-		ctx.fillText('মহাজনি', centerX, centerY - 72);
+		ctx.fillText('ধনী হওয়ার মজার খেলা', centerX, centerY - 72);
 		if (winner) {
 			ctx.font = `bold 52px ${FONT_FAMILY}`;
 			ctx.fillStyle = winner.tokenColor;
