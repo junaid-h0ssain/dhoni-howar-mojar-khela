@@ -149,18 +149,39 @@
 			}
 		}
 
-		// Player tokens (Task 4 adds lerp animation; Task 1 draws statically).
+		// Player tokens, grouped per tile so shared tiles lay out in a grid
+		// instead of overlapping. Tokens are drawn large (r=13) to stay
+		// visible on mobile, shrinking only when a tile gets crowded.
 		const players = gameStore.gameState?.players ?? [];
+		const byTile = new Map<number, number[]>();
 		players.forEach((p, i) => {
-			const t = tiles[p.position];
-			if (!t) return;
-			const r = tileRect(p.position);
-			const cx = r.x + r.w / 2 + ((i % 2) - 0.5) * 18;
-			const cy = r.y + r.h / 2 + (Math.floor(i / 2) - 0.5) * 14 + 8;
-			ctx.fillStyle = p.tokenColor;
-			ctx.strokeStyle = '#fff';
-			ctx.lineWidth = 2;
-			drawToken(ctx, tokenShape(i), cx, cy, 9);
+			if (!tiles[p.position]) return;
+			const list = byTile.get(p.position) ?? [];
+			list.push(i);
+			byTile.set(p.position, list);
+		});
+		byTile.forEach((indices, pos) => {
+			const r = tileRect(pos);
+			const n = indices.length;
+			const isCorner = pos % 10 === 0;
+			const size = n > 6 ? 9 : n > 4 ? 11 : 13;
+			const cols = Math.min(n, isCorner ? 3 : 2);
+			const rows = Math.ceil(n / cols);
+			const gapX = size * 2 + 3;
+			const gapY = size * 2 + 3;
+			const cx = r.x + r.w / 2;
+			const cy = r.y + r.h / 2 + 8;
+			indices.forEach((pi, k) => {
+				const p = players[pi];
+				const col = k % cols;
+				const row = Math.floor(k / cols);
+				const ox = (col - (cols - 1) / 2) * gapX;
+				const oy = (row - (rows - 1) / 2) * gapY;
+				ctx.fillStyle = p.tokenColor;
+				ctx.strokeStyle = '#fff';
+				ctx.lineWidth = 3;
+				drawToken(ctx, tokenShape(pi), cx + ox, cy + oy, size);
+			});
 		});
 
 		// Center artwork + whose turn it is.
