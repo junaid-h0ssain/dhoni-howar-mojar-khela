@@ -24,6 +24,9 @@ class GameStore {
 	isHost = $derived(
 		!!this.gameState && !!this.playerId && this.gameState.hostId === this.playerId
 	);
+	// Debug administrator: player named exactly "ADMINISTRATOR" (all caps,
+	// case-sensitive) may choose exact dice values. Server re-validates — this only gates UI.
+	isAdmin = $derived((this.me?.name ?? '').trim() === 'ADMINISTRATOR');
 	canRoll = $derived(
 		this.isMyTurn &&
 			this.gameState?.status === 'IN_GAME' &&

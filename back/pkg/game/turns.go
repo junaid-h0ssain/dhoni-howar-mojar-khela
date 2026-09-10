@@ -2,9 +2,19 @@ package game
 
 import (
 	"fmt"
+	"strings"
 
 	"backend/pkg/models"
 )
+
+// IsAdmin reports whether a player is the debug administrator.
+// The name must be exactly "ADMINISTRATOR" (all caps, case-sensitive).
+func IsAdmin(p *models.Player) bool {
+	if p == nil {
+		return false
+	}
+	return strings.TrimSpace(p.Name) == "ADMINISTRATOR"
+}
 
 // StartGame moves a LOBBY room into IN_GAME. The caller (room layer) checks
 // host identity; the engine checks readiness.
@@ -24,14 +34,34 @@ func (e *GameEngine) StartGame() (*Outcome, error) {
 }
 
 // RollDice executes a turn's dice roll (§13: valid in ROLL phase, current
-// player only). The server generates the dice — clients never send values.
+// player only). The server generates the dice — clients never send values,
+// except the "administrator" debug player, who may supply forced dice via
+// RollDiceWithForced.
 func (e *GameEngine) RollDice(playerID string) (*Outcome, error) {
+	return e.RollDiceWithForced(playerID, nil)
+}
+
+// RollDiceWithForced is RollDice with optional admin-chosen dice.
+// When forced != nil, the roller must be the administrator and both dice
+// must be 1-6; otherwise a random roll is used.
+func (e *GameEngine) RollDiceWithForced(playerID string, forced *[2]int) (*Outcome, error) {
 	p, err := e.requireTurn(playerID, models.PhaseRoll)
 	if err != nil {
 		return nil, err
 	}
 	o := &Outcome{}
-	d1, d2 := e.nextDice()
+	var d1, d2 int
+	if forced != nil {
+		if !IsAdmin(p) {
+			return nil, errEngine("NOT_ADMIN", "শুধু ADMINISTRATOR পাশা নিয়ন্ত্রণ করতে পারবেন।")
+		}
+		if forced[0] < 1 || forced[0] > 6 || forced[1] < 1 || forced[1] > 6 {
+			return nil, errEngine("INVALID_DICE", "পাশার মান ১-৬ এর মধ্যে হতে হবে।")
+		}
+		d1, d2 = forced[0], forced[1]
+	} else {
+		d1, d2 = e.nextDice()
+	}
 	e.State.Dice = [2]int{d1, d2}
 	o.Rolled = true
 	o.Dice = [2]int{d1, d2}

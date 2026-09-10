@@ -4,6 +4,8 @@
 	import { diceFace } from '$lib/utils/dice';
 
 	let buildTileId = $state<number | null>(null);
+	let adminD1 = $state(6);
+	let adminD2 = $state(6);
 
 	const tilesList = $derived(
 		Object.values(gameStore.gameState?.tiles ?? {}).sort((a, b) => a.id - b.id)
@@ -76,6 +78,35 @@
 		>
 			দান চালুন (Roll Dice)
 		</button>
+		{#if gameStore.isAdmin}
+			<div class="mt-2 rounded-lg border border-red-300 bg-red-50 p-2">
+				<p class="mb-1 text-xs font-semibold text-red-800">🔧 Admin: পাশা নিয়ন্ত্রণ</p>
+				<div class="mb-2 flex gap-2">
+					<label class="flex-1 text-xs">
+						পাশা ১
+						<select class="mt-0.5 w-full rounded-lg border px-2 py-1.5 text-sm" bind:value={adminD1}>
+							{#each [1, 2, 3, 4, 5, 6] as n}
+								<option value={n}>{n}</option>
+							{/each}
+						</select>
+					</label>
+					<label class="flex-1 text-xs">
+						পাশা ২
+						<select class="mt-0.5 w-full rounded-lg border px-2 py-1.5 text-sm" bind:value={adminD2}>
+							{#each [1, 2, 3, 4, 5, 6] as n}
+								<option value={n}>{n}</option>
+							{/each}
+						</select>
+					</label>
+				</div>
+				<button
+					class="w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+					onclick={() => send('ROLL_DICE', { d1: adminD1, d2: adminD2 })}
+				>
+					নির্দিষ্ট দান ({adminD1} + {adminD2})
+				</button>
+			</div>
+		{/if}
 	{:else if gameStore.canAct}
 		{#if gameStore.me?.inJail}
 			<p class="mb-2 text-sm text-gray-600">জেলে আছেন — জোড়া ফেলে মুক্ত হোন অথবা দান শেষ করুন।</p>

@@ -56,7 +56,12 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 		return true
 
 	case models.ActRollDice:
-		o, err := r.Engine.RollDice(c.playerID)
+		forced, errDice := forcedDiceFrom(msg.Payload)
+		if errDice != nil {
+			c.sendError("INVALID_DICE", "পাশার মান ১-৬ এর মধ্যে হতে হবে।", msg.RequestID)
+			return true
+		}
+		o, err := r.Engine.RollDiceWithForced(c.playerID, forced)
 		if err == nil {
 			r.Engine.AutoEndIfNoAction(c.playerID, o)
 		}
@@ -139,6 +144,8 @@ func (r *Room) finishEngineCall(c *Client, msg models.Message, o *game.Outcome, 
 	r.emitState()
 }
 
+func errBadDice() error { return errors.New("invalid dice") }
+
 func tileIDFrom(payload map[string]any) (int, bool) {
 	if payload == nil {
 		return 0, false
@@ -156,4 +163,49 @@ func tileIDFrom(payload map[string]any) (int, bool) {
 		return v, true
 	}
 	return 0, false
+}
+
+// forcedDiceFrom extracts optional admin dice from a ROLL_DICE payload.
+// Accepts {d1,d2} or {dice:[d1,d2]}. Returns (nil, nil) when no dice were
+// supplied (normal random roll), (dice, nil) when valid values were given,
+// or (nil, err) when values are present but malformed — the engine then
+// validates range + admin rights.
+func forcedDiceFrom(payload map[string]any) (*[2]int, error) {
+	if payload == nil {
+		return nil, nil
+	}
+	toInt := func(v any) (int, bool) {
+		switch n := v.(type) {
+		case float64:
+			return int(n), true
+		case int:
+			return n, true
+		case int64:
+			return int(n), true
+		}
+		return 0, false
+	}
+	if raw, ok := payload["dice"]; ok {
+		arr, ok := raw.([]any)
+		if !ok || len(arr) != 2 {
+			return nil, errBadDice()
+		}
+		a, ok1 := toInt(arr[0])
+		b, ok2 := toInt(arr[1])
+		if !ok1 || !ok2 {
+			return nil, errBadDice()
+		}
+		return &[2]int{a, b}, nil
+	}
+	_, hasD1 := payload["d1"]
+	_, hasD2 := payload["d2"]
+	if !hasD1 && !hasD2 {
+		return nil, nil
+	}
+	a, ok1 := toInt(payload["d1"])
+	b, ok2 := toInt(payload["d2"])
+	if !ok1 || !ok2 {
+		return nil, errBadDice()
+	}
+	return &[2]int{a, b}, nil
 }
