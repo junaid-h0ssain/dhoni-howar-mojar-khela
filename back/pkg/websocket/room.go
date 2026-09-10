@@ -159,14 +159,19 @@ func (r *Room) handleAction(c *Client, msg models.Message) {
 			c.sendError("INVALID_NAME", "আপনার নাম দিন।", msg.RequestID)
 			return
 		}
-		if r.Engine.State.Status != models.StatusLobby {
-			c.sendError("GAME_ALREADY_STARTED", "খেলা ইতিমধ্যে শুরু হয়ে গেছে।", msg.RequestID)
+		if r.Engine.State.Status == models.StatusFinished {
+			c.sendError("GAME_FINISHED", "খেলা শেষ হয়ে গেছে। নতুন ঘর তৈরি করুন।", msg.RequestID)
 			return
 		}
-		if len(r.Engine.State.Players) >= 4 {
+		if r.Engine.State.Status != models.StatusLobby && r.Engine.State.Status != models.StatusInGame {
+			c.sendError("GAME_ALREADY_STARTED", "এই ঘরে এখন যোগ দেওয়া যাবে না।", msg.RequestID)
+			return
+		}
+		if len(r.Engine.State.Players) >= 10 {
 			c.sendError("ROOM_FULL", "ঘর পূর্ণ হয়ে গেছে।", msg.RequestID)
 			return
 		}
+		midGame := r.Engine.State.Status == models.StatusInGame
 		playerID := uuid.NewString()
 		p, err := r.Engine.AddPlayer(playerID, playerName)
 		if err != nil {
@@ -179,7 +184,11 @@ func (r *Room) handleAction(c *Client, msg models.Message) {
 		c.playerID = playerID
 		c.sessionToken = token
 		r.attachClient(c)
-		r.Engine.AppendLog(p.Name + " ঘরে যোগ দিয়েছেন।")
+		if midGame {
+			r.Engine.AppendLog(p.Name + " খেলার মাঝে যোগ দিয়েছেন।")
+		} else {
+			r.Engine.AppendLog(p.Name + " ঘরে যোগ দিয়েছেন।")
+		}
 		r.sendTo(c, models.EvRoomCreated, map[string]any{
 			"roomId": r.ID, "playerId": playerID, "sessionToken": token,
 		})

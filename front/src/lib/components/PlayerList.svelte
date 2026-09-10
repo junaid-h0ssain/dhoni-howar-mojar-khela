@@ -48,6 +48,11 @@
 			{/each}
 		</ul>
 		<p class="mt-2 text-xs text-gray-400">বোর্ডে মালিকের রঙের বর্ডার দেখুন — যেকোনো ঘরে ক্লিক করলে বিস্তারিত দেখা যাবে।</p>
+		{#if gameStore.gameState.status === 'IN_GAME' && gameStore.gameState.players.length < 10}
+			<p class="mt-1 rounded-lg bg-green-50 px-2 py-1 text-xs text-green-700">
+				নতুন খেলোয়াড় Room Code ({gameStore.gameState.roomId}) দিয়ে খেলার মাঝেও যোগ দিতে পারবে — ৳1500 নিয়ে শুরু করবে।
+			</p>
+		{/if}
 	{/if}
 </div>
 

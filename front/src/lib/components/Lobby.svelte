@@ -64,6 +64,7 @@
 		>
 			ঘরে যোগ দিন
 		</button>
+		<p class="mt-2 text-center text-xs text-gray-500">খেলা শুরু হয়ে গেলেও Room Code দিয়ে মাঝখানে যোগ দেওয়া যাবে।</p>
 	</div>
 
 	{#if gameStore.lastError}
