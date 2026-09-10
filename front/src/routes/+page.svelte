@@ -6,9 +6,14 @@
 	import PlayerList from '$lib/components/PlayerList.svelte';
 	import PropertyModal from '$lib/components/PropertyModal.svelte';
 	import { gameStore } from '$lib/stores/gameStore.svelte';
-	import { connect, hasSavedSession } from '$lib/utils/websocket';
+	import { connect, hasSavedSession, leaveRoom } from '$lib/utils/websocket';
 
 	let selectedTile: number | null = $state(null);
+
+	function handleLeave() {
+		selectedTile = null;
+		leaveRoom();
+	}
 
 	onMount(() => {
 		// Reload / dropped connection: the store starts empty but the seat
@@ -67,6 +72,15 @@
 				</div>
 			{/if}
 		</div>
+		<footer class="mx-auto mt-4 max-w-6xl pb-6 text-center">
+			<button
+				class="rounded-lg border border-gray-300 px-3 py-1 text-xs text-gray-500 hover:bg-white hover:text-gray-700"
+				onclick={handleLeave}
+				title="ঘর ছেড়ে লবিতে ফিরুন (আবার যোগ দিতে একই নাম ও রুম কোড লাগবে)"
+			>
+				ঘর ছেড়ে যান
+			</button>
+		</footer>
 	{/if}
 
 	<PropertyModal tileId={selectedTile} onclose={() => (selectedTile = null)} />

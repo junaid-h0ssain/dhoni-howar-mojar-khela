@@ -109,6 +109,7 @@ const (
 	ActCreateRoom  = "CREATE_ROOM"
 	ActJoinRoom    = "JOIN_ROOM"
 	ActReconnect   = "RECONNECT"
+	ActLeaveRoom   = "LEAVE_ROOM"
 	ActStartGame   = "START_GAME"
 	ActRollDice    = "ROLL_DICE"
 	ActBuyProperty = "BUY_PROPERTY"

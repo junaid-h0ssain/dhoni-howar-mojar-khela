@@ -188,6 +188,27 @@ export function send(type: string, payload: Record<string, unknown> = {}): void 
 	socket.send(JSON.stringify(msg));
 }
 
+/** Leave the room: free the seat server-side, drop the saved session so
+ * auto-reconnect stops, and return to the lobby. Rejoining later uses the
+ * normal join flow — the same player name plus the room code. */
+export function leaveRoom(): void {
+	// Best-effort seat release; the socket is closed below regardless.
+	if (socket && socket.readyState === WebSocket.OPEN) {
+		try {
+			const msg: WsMessage = { type: 'LEAVE_ROOM', payload: {} };
+			if (gameStore.sessionToken) msg.sessionToken = gameStore.sessionToken;
+			socket.send(JSON.stringify(msg));
+		} catch {
+			/* ignore — disconnect covers it */
+		}
+	}
+	clearSavedSession();
+	gameStore.reset();
+	// Let the LEAVE message flush before the close handshake tears down
+	// the socket; the server also guards via __disconnect__ if it never lands.
+	setTimeout(() => disconnect(), 250);
+}
+
 export function disconnect(): void {
 	manualClose = true;
 	if (reconnectTimer) {

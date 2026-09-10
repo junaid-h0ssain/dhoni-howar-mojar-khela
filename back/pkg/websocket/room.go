@@ -221,6 +221,39 @@ func (r *Room) handleAction(c *Client, msg models.Message) {
 		r.emit(models.EvPlayerReconnected, map[string]any{"playerId": p.ID})
 		r.emitState()
 
+	case models.ActLeaveRoom:
+		pid := c.playerID
+		if pid == "" {
+			c.sendError("NOT_IN_ROOM", "আপনি কোনো ঘরে নেই।", msg.RequestID)
+			return
+		}
+		oldHost := r.Engine.State.HostID
+		removed, _, finished, winnerID := r.Engine.RemovePlayer(pid)
+		if removed == nil {
+			c.sendError("PLAYER_NOT_FOUND", "খেলোয়াড় পাওয়া যায়নি।", msg.RequestID)
+			return
+		}
+		if c.sessionToken != "" {
+			_ = r.hub.sessions.Delete(ctxBG(), c.sessionToken)
+		}
+		// Unbind first (uses the old pid), then scrub identity so the
+		// socket's later close is a no-op: the seat is already gone, so no
+		// __disconnect__ timeout must be scheduled for it.
+		r.detachClient(c)
+		c.playerID = ""
+		c.sessionToken = ""
+		r.Engine.AppendLog(removed.Name + " ঘর ছেড়ে গেছেন।")
+		if r.Engine.State.HostID != oldHost {
+			if heir := r.Engine.FindPlayer(r.Engine.State.HostID); heir != nil {
+				r.Engine.AppendLog(heir.Name + " এখন হোস্ট।")
+			}
+		}
+		r.emit(models.EvPlayerLeft, map[string]any{"playerId": removed.ID})
+		if finished {
+			r.emit(models.EvGameFinished, map[string]any{"winnerId": winnerID})
+		}
+		r.emitState()
+
 	case models.ActStartGame:
 		if c.playerID != r.Engine.State.HostID {
 			c.sendError("NOT_HOST", "শুধু হোস্ট খেলা শুরু করতে পারবেন।", msg.RequestID)

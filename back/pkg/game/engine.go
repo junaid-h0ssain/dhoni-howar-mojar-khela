@@ -155,6 +155,70 @@ func (e *GameEngine) FindPlayer(id string) *models.Player {
 	return nil
 }
 
+// RemovePlayer frees a seat so its owner can leave the room. In LOBBY the
+// seat simply vanishes; mid-game its properties return to the bank, a stuck
+// turn advances past it, and the win condition is checked. Host ownership
+// passes to a connected survivor. Rejoining later with the same name + room
+// code joins as a fresh seat. Returns the removed player, or nil if absent.
+func (e *GameEngine) RemovePlayer(id string) (removed *models.Player, turnAdvanced, finished bool, winnerID string) {
+	idx := -1
+	for i, p := range e.State.Players {
+		if p.ID == id {
+			idx = i
+			removed = p
+			break
+		}
+	}
+	if idx < 0 {
+		return nil, false, false, ""
+	}
+	wasCurrent := e.State.CurrentTurnPlayerID == id
+	wasHost := e.State.HostID == id
+	if e.State.Status == models.StatusInGame {
+		for _, t := range e.State.Tiles {
+			if t.OwnerID == id {
+				t.OwnerID = ""
+				t.Houses = 0
+				t.IsMortgaged = false
+			}
+		}
+	}
+	e.State.Players = append(e.State.Players[:idx], e.State.Players[idx+1:]...)
+	if wasHost && len(e.State.Players) > 0 {
+		heir := e.State.Players[0]
+		for _, p := range e.State.Players {
+			if !p.IsBankrupt && p.IsConnected {
+				heir = p
+				break
+			}
+		}
+		e.State.HostID = heir.ID
+	}
+	if e.State.Status == models.StatusInGame && len(e.State.Players) > 0 {
+		if wasCurrent {
+			e.advanceTurn()
+			turnAdvanced = true
+			if e.State.CurrentTurnPlayerID == id {
+				// No online heir: park the (paused) turn on the first
+				// surviving seat until someone reconnects.
+				for _, p := range e.State.Players {
+					if !p.IsBankrupt {
+						e.State.CurrentTurnPlayerID = p.ID
+						break
+					}
+				}
+				e.State.TurnPhase = models.PhaseRoll
+			}
+		}
+		o := &Outcome{}
+		if e.checkWin(o) {
+			finished = true
+			winnerID = o.WinnerID
+		}
+	}
+	return removed, turnAdvanced, finished, winnerID
+}
+
 // AppendLog keeps the last 100 entries (frontend shows latest).
 func (e *GameEngine) AppendLog(entry string) {
 	e.State.Logs = append(e.State.Logs, entry)
