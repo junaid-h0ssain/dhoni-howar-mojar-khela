@@ -15,6 +15,8 @@
 		}
 		return { props, houses };
 	}
+
+	const tokenShapes = ['circle', 'square', 'triangle', 'diamond', 'star', 'hexagon', 'pentagon', 'plus', 'ring', 'shield'];
 </script>
 
 <div class="rounded-2xl bg-white p-4 shadow">
@@ -23,11 +25,11 @@
 		<p class="text-sm text-gray-500">এখনও কেউ যোগ দেয়নি।</p>
 	{:else}
 		<ul class="space-y-1">
-			{#each gameStore.gameState.players as p (p.id)}
+			{#each gameStore.gameState.players as p, i (p.id)}
 				{@const h = holdings(p.id)}
 				<li class="flex flex-wrap items-center gap-2 text-sm" title="সম্পত্তি: {h.props}, বাড়ি/হোটেল: {h.houses}">
 					<span
-						class="inline-block h-3 w-3 rounded-full"
+						class="inline-block h-3 w-3 {tokenShapes[i % tokenShapes.length]}"
 						style:background-color={p.tokenColor}
 					></span>
 					<span class="font-medium">{p.name}</span>
@@ -48,3 +50,16 @@
 		<p class="mt-2 text-xs text-gray-400">বোর্ডে মালিকের রঙের বর্ডার দেখুন — যেকোনো ঘরে ক্লিক করলে বিস্তারিত দেখা যাবে।</p>
 	{/if}
 </div>
+
+<style>
+	.circle { border-radius: 9999px; }
+	.square { border-radius: 2px; }
+	.triangle { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+	.diamond { transform: rotate(45deg) scale(0.78); border-radius: 2px; }
+	.star { clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 100%, 50% 73%, 21% 100%, 32% 57%, 2% 35%, 39% 35%); }
+	.hexagon { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+	.pentagon { clip-path: polygon(50% 0, 100% 38%, 82% 100%, 18% 100%, 0 38%); }
+	.plus { clip-path: polygon(35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%); }
+	.ring { border: 3px solid currentColor; border-radius: 9999px; background: transparent !important; }
+	.shield { clip-path: polygon(50% 0, 95% 18%, 85% 72%, 50% 100%, 15% 72%, 5% 18%); }
+</style>

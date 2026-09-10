@@ -31,6 +31,48 @@
 		return size;
 	}
 
+	const TOKEN_SHAPES = ['circle', 'square', 'triangle', 'diamond', 'star', 'hexagon', 'pentagon', 'plus', 'ring', 'shield'];
+
+	function tokenShape(index: number): string {
+		return TOKEN_SHAPES[index % TOKEN_SHAPES.length];
+	}
+
+	function drawToken(ctx: CanvasRenderingContext2D, shape: string, cx: number, cy: number, size: number) {
+		ctx.beginPath();
+		if (shape === 'circle' || shape === 'ring') {
+			ctx.arc(cx, cy, size, 0, Math.PI * 2);
+		} else if (shape === 'square') {
+			ctx.rect(cx - size, cy - size, size * 2, size * 2);
+		} else if (shape === 'triangle' || shape === 'diamond' || shape === 'pentagon' || shape === 'hexagon' || shape === 'star' || shape === 'shield') {
+			const points = shape === 'triangle' ? 3 : shape === 'diamond' ? 4 : shape === 'pentagon' ? 5 : shape === 'hexagon' ? 6 : shape === 'shield' ? 6 : 10;
+			const rotation = shape === 'diamond' ? Math.PI / 4 : -Math.PI / 2;
+			for (let j = 0; j < points; j++) {
+				const radius = shape === 'star' && j % 2 === 1 ? size * 0.45 : size;
+				const angle = rotation + (j * Math.PI * 2) / points;
+				const x = cx + Math.cos(angle) * radius;
+				const y = cy + Math.sin(angle) * radius;
+				j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+			}
+			ctx.closePath();
+		} else {
+			ctx.moveTo(cx - size, cy - size / 3);
+			ctx.lineTo(cx - size / 3, cy - size / 3);
+			ctx.lineTo(cx - size / 3, cy - size);
+			ctx.lineTo(cx + size / 3, cy - size);
+			ctx.lineTo(cx + size / 3, cy - size / 3);
+			ctx.lineTo(cx + size, cy - size / 3);
+			ctx.lineTo(cx + size, cy + size / 3);
+			ctx.lineTo(cx + size / 3, cy + size / 3);
+			ctx.lineTo(cx + size / 3, cy + size);
+			ctx.lineTo(cx - size / 3, cy + size);
+			ctx.lineTo(cx - size / 3, cy + size / 3);
+			ctx.lineTo(cx - size, cy + size / 3);
+			ctx.closePath();
+		}
+		if (shape !== 'ring') ctx.fill();
+		ctx.stroke();
+	}
+
 	function draw() {
 		const ctx = canvas?.getContext('2d');
 		if (!ctx || !canvas) return;
@@ -115,13 +157,10 @@
 			const r = tileRect(p.position);
 			const cx = r.x + r.w / 2 + ((i % 2) - 0.5) * 18;
 			const cy = r.y + r.h / 2 + (Math.floor(i / 2) - 0.5) * 14 + 8;
-			ctx.beginPath();
-			ctx.arc(cx, cy, 8, 0, Math.PI * 2);
 			ctx.fillStyle = p.tokenColor;
-			ctx.fill();
 			ctx.strokeStyle = '#fff';
 			ctx.lineWidth = 2;
-			ctx.stroke();
+			drawToken(ctx, tokenShape(i), cx, cy, 9);
 		});
 
 		// Center artwork + whose turn it is.
