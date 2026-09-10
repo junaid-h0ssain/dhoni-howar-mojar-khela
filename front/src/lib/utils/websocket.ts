@@ -5,42 +5,15 @@ import { gameStore } from '$lib/stores/gameStore.svelte';
 import type { GameState, WsMessage } from '$lib/constants/boardData';
 
 const SESSION_KEY = 'mahajoni.sessionToken';
-const WS_URL_KEY = 'mahajoni.wsUrl';
+const WS_URL = 'wss://dhmk.onrender.com/ws';
 
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
 let manualClose = false;
 
-function defaultWsUrl(): string {
-	// SvelteKit public env is inlined at build time; fall back to local dev.
-	try {
-		const envUrl = (import.meta.env as Record<string, string | undefined>)['PUBLIC_WS_URL'];
-		if (envUrl) return envUrl;
-	} catch {
-		/* ignore */
-	}
-	if (typeof window !== 'undefined') {
-		const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-		return `${proto}://${window.location.hostname}:8080/ws`;
-	}
-	return 'ws://localhost:8080/ws';
-}
-
-export function getWsUrl(): string {
-	if (typeof localStorage !== 'undefined') {
-		const saved = localStorage.getItem(WS_URL_KEY);
-		if (saved) return saved;
-	}
-	return defaultWsUrl();
-}
-
-export function setWsUrl(url: string) {
-	try {
-		localStorage.setItem(WS_URL_KEY, url);
-	} catch {
-		/* ignore */
-	}
+function getWsUrl(): string {
+	return WS_URL;
 }
 
 export function loadSessionToken(): string | null {
@@ -60,11 +33,11 @@ function saveSessionToken(token: string) {
 	}
 }
 
-export function connect(url?: string): void {
+export function connect(): void {
 	disconnect();
 	manualClose = false;
 	gameStore.connection = 'connecting';
-	const target = url ?? getWsUrl();
+	const target = getWsUrl();
 	socket = new WebSocket(target);
 	socket.onopen = () => {
 		gameStore.connection = 'open';
@@ -74,20 +47,20 @@ export function connect(url?: string): void {
 	socket.onclose = () => {
 		gameStore.connection = 'closed';
 		socket = null;
-		scheduleReconnect(target);
+		scheduleReconnect();
 	};
 	socket.onerror = () => {
 		gameStore.lastError = 'সংযোগে সমস্যা হয়েছে।';
 	};
 }
 
-function scheduleReconnect(url: string) {
+function scheduleReconnect() {
 	if (manualClose) return;
 	if (typeof window === 'undefined') return;
 	reconnectAttempts += 1;
 	const delay = Math.min(1000 * 2 ** Math.min(reconnectAttempts, 5), 15000);
 	if (reconnectTimer) clearTimeout(reconnectTimer);
-	reconnectTimer = setTimeout(() => connect(url), delay);
+	reconnectTimer = setTimeout(() => connect(), delay);
 }
 
 export function send(type: string, payload: Record<string, unknown> = {}): void {

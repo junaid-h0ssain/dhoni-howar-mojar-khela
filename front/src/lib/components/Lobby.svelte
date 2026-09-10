@@ -4,11 +4,10 @@
 
 	let playerName = $state('');
 	let roomCode = $state('');
-	let wsUrl = $state('ws://localhost:8080/ws');
 
 	function createRoom() {
 		if (!playerName.trim()) return;
-		connect(wsUrl);
+		connect();
 		const wait = setInterval(() => {
 			if (gameStore.connection === 'open') {
 				clearInterval(wait);
@@ -19,7 +18,7 @@
 
 	function joinRoom() {
 		if (!playerName.trim() || !roomCode.trim()) return;
-		connect(wsUrl);
+		connect();
 		const wait = setInterval(() => {
 			if (gameStore.connection === 'open') {
 				clearInterval(wait);
@@ -32,15 +31,6 @@
 <div class="mx-auto max-w-md space-y-6 rounded-2xl bg-white p-6 shadow-lg">
 	<h1 class="text-center text-3xl font-bold">মহাজনি</h1>
 	<p class="text-center text-sm text-gray-500">বাংলাদেশের মনোপলি — বন্ধুদের সাথে অনলাইনে খেলুন</p>
-
-	<label class="block">
-		<span class="mb-1 block text-sm font-medium">সার্ভার (WebSocket URL)</span>
-		<input
-			class="w-full rounded-lg border px-3 py-2 text-sm"
-			bind:value={wsUrl}
-			placeholder="ws://localhost:8080/ws"
-		/>
-	</label>
 
 	<label class="block">
 		<span class="mb-1 block text-sm font-medium">আপনার নাম</span>
