@@ -1,12 +1,22 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import Lobby from '$lib/components/Lobby.svelte';
 	import BoardCanvas from '$lib/components/BoardCanvas.svelte';
 	import ActionPanel from '$lib/components/ActionPanel.svelte';
 	import PlayerList from '$lib/components/PlayerList.svelte';
 	import PropertyModal from '$lib/components/PropertyModal.svelte';
 	import { gameStore } from '$lib/stores/gameStore.svelte';
+	import { connect, hasSavedSession } from '$lib/utils/websocket';
 
 	let selectedTile: number | null = $state(null);
+
+	onMount(() => {
+		// Reload / dropped connection: the store starts empty but the seat
+		// lives on the server for 120s — auto-RECONNECT to retain play state.
+		if (!gameStore.gameState && hasSavedSession()) {
+			connect({ resume: true });
+		}
+	});
 
 	function copyRoomCode() {
 		if (gameStore.roomCode) navigator.clipboard?.writeText(gameStore.roomCode).catch(() => {});
@@ -32,6 +42,9 @@
 			{/if}
 			<span class="text-xs text-gray-500">
 				সংযোগ: {gameStore.connection === 'open' ? '🟢 সংযুক্ত' : '🔴 বিচ্ছিন্ন'}
+				{#if gameStore.connection !== 'open' && gameStore.gameState}
+					<span class="ml-1">— পুনরায় সংযোগ হচ্ছে… আপনার চাল সংরক্ষিত আছে।</span>
+				{/if}
 			</span>
 		</header>
 

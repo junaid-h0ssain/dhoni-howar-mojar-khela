@@ -251,6 +251,46 @@ func TestTaxAndBankruptcyToWin(t *testing.T) {
 	}
 }
 
+func TestRentBankruptcyTransfersCashAndProperties(t *testing.T) {
+	e, host, guest := newStartedEngine(10)
+	tile := e.State.Tiles[1]
+	tile.OwnerID = guest.ID
+	tile.Houses = 2
+	host.Position = 0
+	host.Cash = 0
+	e.State.CurrentTurnPlayerID = host.ID
+	e.SetFixedDice([][2]int{{0, 1}})
+
+	o, err := e.RollDice(host.ID)
+	if err != nil {
+		t.Fatalf("roll failed: %v", err)
+	}
+	if !o.Finished || o.WinnerID != guest.ID || !host.IsBankrupt {
+		t.Fatalf("expected rent bankruptcy: %+v", o)
+	}
+	if tile.OwnerID != guest.ID || tile.Houses != 2 {
+		t.Fatalf("rent creditor should receive property: %+v", tile)
+	}
+}
+
+func TestTaxBankruptcyReturnsPropertiesToBank(t *testing.T) {
+	e, host, guest := newStartedEngine(11)
+	tile := e.State.Tiles[1]
+	tile.OwnerID = host.ID
+	tile.Houses = 2
+	host.Position = 0
+	host.Cash = 150
+	e.SetFixedDice([][2]int{{1, 3}})
+
+	if _, err := e.RollDice(host.ID); err != nil {
+		t.Fatalf("roll failed: %v", err)
+	}
+	if tile.OwnerID != "" || tile.Houses != 0 || tile.IsMortgaged {
+		t.Fatalf("bank should receive tax bankrupt player's property: %+v", tile)
+	}
+	_ = guest
+}
+
 func TestBuildHouseRules(t *testing.T) {
 	e, host, guest := newStartedEngine(9)
 	e.State.TurnPhase = models.PhaseAction

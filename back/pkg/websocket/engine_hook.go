@@ -18,9 +18,20 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 		playerID, _ := msg.Payload["playerId"].(string)
 		sessionToken, _ := msg.Payload["sessionToken"].(string)
 		if p := r.Engine.FindPlayer(playerID); p != nil {
+			wasCurrent := r.Engine.State.Status == models.StatusInGame &&
+				r.Engine.State.CurrentTurnPlayerID == playerID
 			p.IsConnected = false
 			r.Engine.AppendLog(p.Name + " সংযোগ বিচ্ছিন্ন হয়েছেন।")
 			r.emit(models.EvPlayerDisconnected, map[string]any{"playerId": playerID})
+			// The offline player cannot roll, so never leave the dice with
+			// them: hand the turn to the next online player right away.
+			if wasCurrent {
+				if r.Engine.ForfeitTurn(playerID) {
+					if next := r.Engine.FindPlayer(r.Engine.State.CurrentTurnPlayerID); next != nil {
+						r.Engine.AppendLog(p.Name + " অফলাইন থাকায় চাল " + next.Name + "-এর কাছে গেছে।")
+					}
+				}
+			}
 			r.emitState()
 			// Reconnection window (§11); on expiry the seat is freed and a
 			// stuck turn is forfeited so the game never stalls.
@@ -52,6 +63,42 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 			}
 			r.emit(models.EvPlayerLeft, map[string]any{"playerId": playerID})
 			r.emitState()
+		}
+		return true
+
+	case "__check_empty__":
+		r.mu.RLock()
+		n := len(r.clients)
+		r.mu.RUnlock()
+		if n != 0 {
+			return true
+		}
+		// Grace period: rooms with seats survive the full 120s reconnect
+		// window (+buffer) so a reload never wipes the game; truly empty
+		// rooms go away fast.
+		delay := 5 * time.Second
+		if len(r.Engine.State.Players) > 0 {
+			delay = store.ReconnectTTL + 60*time.Second
+		}
+		go func() {
+			select {
+			case <-time.After(delay):
+				select {
+				case r.actions <- inboundAction{msg: models.Message{Type: "__reap_if_empty__"}}:
+				case <-r.quit:
+				}
+			case <-r.quit:
+			}
+		}()
+		return true
+
+	case "__reap_if_empty__":
+		r.mu.RLock()
+		n := len(r.clients)
+		r.mu.RUnlock()
+		if n == 0 {
+			r.quitOnce.Do(func() { close(r.quit) })
+			r.hub.RemoveRoom(r.ID)
 		}
 		return true
 

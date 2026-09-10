@@ -100,17 +100,16 @@ func (r *Room) detachClient(c *Client) {
 	empty := len(r.clients) == 0
 	r.mu.Unlock()
 	if empty {
-		// Give stragglers a moment, then clean up empty rooms.
-		go func() {
-			time.Sleep(5 * time.Second)
-			r.mu.RLock()
-			n := len(r.clients)
-			r.mu.RUnlock()
-			if n == 0 {
-				r.quitOnce.Do(func() { close(r.quit) })
-				r.hub.RemoveRoom(r.ID)
-			}
-		}()
+		// Do NOT reap rooms that still hold game state: a reload or a brief
+		// network drop leaves zero sockets for a moment, but the 120s
+		// reconnect window (§11) must survive it. Route the check through
+		// the event loop so Engine access stays race-free.
+		select {
+		case r.actions <- inboundAction{client: &Client{}, msg: models.Message{
+			Type: "__check_empty__",
+		}}:
+		default:
+		}
 	}
 }
 

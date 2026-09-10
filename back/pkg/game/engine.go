@@ -174,7 +174,11 @@ func (e *GameEngine) alivePlayers() []*models.Player {
 	return out
 }
 
-// advanceTurn moves to the next non-bankrupt player and resets turn state.
+// advanceTurn moves to the next playable player (non-bankrupt AND connected)
+// and resets turn state. Offline players are never given the dice because
+// they cannot roll it — the turn skips straight past them. If every remaining
+// player is offline, the turn is left untouched so the game pauses instead of
+// spinning; it resumes as soon as someone reconnects.
 func (e *GameEngine) advanceTurn() {
 	alive := e.alivePlayers()
 	if len(alive) == 0 {
@@ -189,13 +193,14 @@ func (e *GameEngine) advanceTurn() {
 	}
 	for step := 1; step <= len(e.State.Players); step++ {
 		next := e.State.Players[(idx+step+len(e.State.Players))%len(e.State.Players)]
-		if !next.IsBankrupt {
+		if !next.IsBankrupt && next.IsConnected {
 			e.State.CurrentTurnPlayerID = next.ID
-			break
+			e.State.TurnPhase = models.PhaseRoll
+			e.doublesCount = 0
+			return
 		}
 	}
-	e.State.TurnPhase = models.PhaseRoll
-	e.doublesCount = 0
+	// No online player available: keep the turn where it is (paused).
 }
 
 // payOrBankrupt transfers amount from payer to creditorID ("bank" = the bank).
@@ -215,7 +220,7 @@ func (e *GameEngine) payOrBankrupt(payer *models.Player, amount int, creditorID,
 		}
 		return true
 	}
-	// Bankruptcy: creditor gets the remainder.
+// Bankruptcy: the creditor gets the remainder of the cash.
 	remainder := payer.Cash
 	payer.Cash = 0
 	if creditorID != "bank" {
@@ -224,18 +229,24 @@ func (e *GameEngine) payOrBankrupt(payer *models.Player, amount int, creditorID,
 		}
 	}
 	e.AppendLog(fmt.Sprintf("%s %s ৳%d দিতে না পেরে দেউলিয়া হয়ে গেছেন।", payer.Name, reason, amount))
-	e.bankruptPlayer(payer, o)
+	e.bankruptPlayer(payer, creditorID, o)
 	return false
 }
 
-// bankruptPlayer releases holdings, marks bankruptcy, and advances/finishes.
-func (e *GameEngine) bankruptPlayer(p *models.Player, o *Outcome) {
+// bankruptPlayer transfers holdings to a player creditor, or releases them to
+// the bank when the debt came from a tax, fine, or card bill.
+func (e *GameEngine) bankruptPlayer(p *models.Player, creditorID string, o *Outcome) {
 	p.IsBankrupt = true
+	creditor := e.FindPlayer(creditorID)
 	for _, t := range e.State.Tiles {
 		if t.OwnerID == p.ID {
-			t.OwnerID = ""
-			t.Houses = 0
-			t.IsMortgaged = false
+			if creditor != nil && !creditor.IsBankrupt {
+				t.OwnerID = creditor.ID
+			} else {
+				t.OwnerID = ""
+				t.Houses = 0
+				t.IsMortgaged = false
+			}
 		}
 	}
 	o.Bankrupted = append(o.Bankrupted, p.ID)
@@ -321,6 +332,8 @@ func (e *GameEngine) countOwned(playerID, group string) int {
 }
 
 // requireTurn validates status, identity, and phase for acting players.
+// Offline players can never hold the dice (advanceTurn skips them), so any
+// action arriving from a disconnected seat is rejected instead of stalling.
 func (e *GameEngine) requireTurn(playerID string, phases ...models.TurnPhase) (*models.Player, error) {
 	if e.State.Status != models.StatusInGame {
 		return nil, errEngine("NOT_IN_GAME", "খেলা এখন চলছে না।")
@@ -331,6 +344,9 @@ func (e *GameEngine) requireTurn(playerID string, phases ...models.TurnPhase) (*
 	}
 	if p.IsBankrupt {
 		return nil, errEngine("BANKRUPT", "আপনি দেউলিয়া হয়ে গেছেন।")
+	}
+	if !p.IsConnected {
+		return nil, errEngine("DISCONNECTED", "আপনি অফলাইন আছেন। পুনরায় সংযোগ করুন।")
 	}
 	if e.State.CurrentTurnPlayerID != playerID {
 		return nil, errEngine("NOT_YOUR_TURN", "এখন আপনার চাল নয়।")
