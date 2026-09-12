@@ -48,16 +48,30 @@
 		if (houses > 0) return `বাড়ি ×${houses}`;
 		return 'খালি জমি';
 	}
+
+	function rollDice(payload?: Record<string, unknown>) {
+		gameStore.beginDiceRoll();
+		send('ROLL_DICE', payload ?? {});
+	}
+
+	const shownDice = $derived(gameStore.displayDice ?? gameStore.gameState?.dice ?? [1, 1]);
+	const diceRolling = $derived(gameStore.diceAnimating);
 </script>
 
 <div>
 	<h2 class="mb-2 text-sm font-semibold tracking-wide text-amber-700">🎯 চাল</h2>
 	{#if gameStore.gameState?.status === 'IN_GAME'}
-		{@const [d1, d2] = gameStore.gameState.dice}
-		{#key `${d1}-${d2}`}
-			<p class="anim-dice-pop mb-2 text-center text-3xl tracking-widest" title="সর্বশেষ দান">
-				{diceFace(d1)}{diceFace(d2)}
-				<span class="ml-1 align-middle text-sm text-slate-500">= {d1 + d2}</span>
+		{#key diceRolling ? 'rolling' : `${shownDice[0]}-${shownDice[1]}`}
+			<p
+				class="{diceRolling ? 'anim-dice-rolling' : 'anim-dice-pop'} mb-2 text-center text-3xl tracking-widest"
+				title="সর্বশেষ দান"
+			>
+				{diceFace(shownDice[0])}{diceFace(shownDice[1])}
+				{#if diceRolling}
+					<span class="ml-1 align-middle text-sm text-slate-500">ঘুরছে…</span>
+				{:else}
+					<span class="ml-1 align-middle text-sm text-slate-500">= {shownDice[0] + shownDice[1]}</span>
+				{/if}
 			</p>
 		{/key}
 	{/if}
@@ -91,10 +105,11 @@
 	{:else if gameStore.canRoll}
 		<ClickSpark sparkColor="#059669" sparkCount={12} sparkRadius={30}>
 			<button
-				class="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-lg font-bold text-white transition hover:bg-emerald-500 active:scale-95"
-				onclick={() => send('ROLL_DICE')}
+				class="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-lg font-bold text-white transition hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
+				disabled={gameStore.diceAnimating}
+				onclick={() => rollDice()}
 			>
-				🎲 দান চালুন!
+				{gameStore.diceAnimating ? '🎲 ঘুরছে…' : '🎲 দান চালুন!'}
 			</button>
 		</ClickSpark>
 		{#if gameStore.isAdmin}
@@ -119,8 +134,9 @@
 					</label>
 				</div>
 				<button
-					class="w-full rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 active:scale-95"
-					onclick={() => send('ROLL_DICE', { d1: adminD1, d2: adminD2 })}
+					class="w-full rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 active:scale-95 disabled:opacity-50"
+					disabled={gameStore.diceAnimating}
+					onclick={() => rollDice({ d1: adminD1, d2: adminD2 })}
 				>
 					নির্দিষ্ট দান ({adminD1} + {adminD2})
 				</button>

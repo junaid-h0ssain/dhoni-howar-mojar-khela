@@ -226,6 +226,22 @@ export function disconnect(): void {
 	gameStore.connection = 'closed';
 }
 
+function applyGameState(next: GameState) {
+	const prev = gameStore.gameState;
+	gameStore.gameState = next;
+	// A changed dice pair means a roll just landed: play the 5s shuffle for
+	// the roller and every spectator, then reveal the authoritative faces.
+	// Skip the animation on first load (no previous state to compare).
+	if (
+		prev &&
+		next.status === 'IN_GAME' &&
+		Array.isArray(next.dice) &&
+		(prev.dice[0] !== next.dice[0] || prev.dice[1] !== next.dice[1])
+	) {
+		gameStore.settleDiceRoll([next.dice[0], next.dice[1]]);
+	}
+}
+
 function handleMessage(raw: string) {
 	let msg: WsMessage;
 	try {
@@ -249,7 +265,7 @@ function handleMessage(raw: string) {
 			break;
 		}
 		case 'GAME_STATE': {
-			gameStore.gameState = payload as unknown as GameState;
+			applyGameState(payload as unknown as GameState);
 			if (gameStore.gameState?.roomId) {
 				gameStore.roomCode = gameStore.gameState.roomId;
 				lsSet(ROOM_KEY, gameStore.gameState.roomId);
@@ -290,7 +306,7 @@ function handleMessage(raw: string) {
 			// Task 5: handle DICE_ROLLED / PLAYER_MOVED / … animations.
 			// Unknown state-carrying events fall through to a GAME_STATE refresh.
 			if ('roomId' in payload && 'players' in payload) {
-				gameStore.gameState = payload as unknown as GameState;
+				applyGameState(payload as unknown as GameState);
 			}
 			break;
 		}
