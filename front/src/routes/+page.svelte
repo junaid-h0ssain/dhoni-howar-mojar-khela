@@ -5,6 +5,7 @@
 	import ActionPanel from '$lib/components/ActionPanel.svelte';
 	import PlayerList from '$lib/components/PlayerList.svelte';
 	import PropertyModal from '$lib/components/PropertyModal.svelte';
+	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 	import { gameStore } from '$lib/stores/gameStore.svelte';
 	import { connect, hasSavedSession, leaveRoom } from '$lib/utils/websocket';
 
@@ -26,55 +27,103 @@
 	function copyRoomCode() {
 		if (gameStore.roomCode) navigator.clipboard?.writeText(gameStore.roomCode).catch(() => {});
 	}
+
+	const inGame = $derived(!!gameStore.gameState || !!gameStore.roomCode);
+	const logs = $derived([...(gameStore.gameState?.logs ?? [])].reverse().slice(0, 12));
 </script>
 
-<main class="min-h-screen bg-gradient-to-b from-emerald-50 to-slate-100 p-4">
-	{#if !gameStore.gameState && !gameStore.roomCode}
+<!-- Flat off-white backdrop -->
+<div class="pointer-events-none fixed inset-0 -z-10 bg-[#f7f4ec]"></div>
+
+<main class="min-h-screen p-4 text-slate-800">
+	{#if !inGame}
 		<div class="py-10">
 			<Lobby />
 		</div>
 	{:else}
-		<header class="mx-auto mb-4 flex max-w-6xl flex-wrap items-center justify-between gap-2">
-			<h1 class="text-2xl font-bold">ধনী হওয়ার মজার খেলা</h1>
-			{#if gameStore.roomCode}
-				<button
-					class="rounded-lg bg-white px-3 py-1 font-mono text-lg shadow"
-					onclick={copyRoomCode}
-					title="কপি করুন"
-				>
-					{gameStore.roomCode} ⧉
-				</button>
-			{/if}
-			<span class="text-xs text-gray-500">
-				সংযোগ: {gameStore.connection === 'open' ? '🟢 সংযুক্ত' : '🔴 বিচ্ছিন্ন'}
-				{#if gameStore.connection !== 'open' && gameStore.gameState}
-					<span class="ml-1">— পুনরায় সংযোগ হচ্ছে… আপনার চাল সংরক্ষিত আছে।</span>
+		<header class="mx-auto mb-4 flex max-w-6xl flex-wrap items-center justify-between gap-3">
+			<div>
+				<h1 class="text-2xl font-bold text-emerald-950 sm:text-3xl">ধনী হওয়ার মজার খেলা</h1>
+				<p class="mt-0.5 text-xs text-emerald-800/70">
+					{gameStore.currentPlayer?.name
+						? `${gameStore.currentPlayer.name} এর চাল চলছে…`
+						: 'মহাজনি বাজারে স্বাগতম'}
+				</p>
+			</div>
+			<div class="flex items-center gap-2">
+				{#if gameStore.roomCode}
+					<button
+						class="rounded-xl border border-amber-600/30 bg-amber-100 px-3 py-1.5 font-mono text-lg tracking-widest text-amber-900 transition hover:bg-amber-200 active:scale-95"
+						onclick={copyRoomCode}
+						title="কপি করুন"
+					>
+						{gameStore.roomCode} ⧉
+					</button>
 				{/if}
-			</span>
+				<span
+					class="flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600"
+				>
+					<span
+						class="inline-block h-2 w-2 rounded-full {gameStore.connection === 'open'
+							? 'anim-glow-drift bg-emerald-500'
+							: 'bg-red-500'}"
+					></span>
+					{gameStore.connection === 'open' ? 'সংযুক্ত' : 'বিচ্ছিন্ন'}
+				</span>
+			</div>
+			{#if gameStore.connection !== 'open' && gameStore.gameState}
+				<p
+					class="w-full rounded-xl border border-amber-600/30 bg-amber-100 px-3 py-2 text-center text-xs text-amber-900"
+				>
+					পুনরায় সংযোগ হচ্ছে… আপনার টাকা, জমি ও চাল সংরক্ষিত আছে।
+				</p>
+			{/if}
 		</header>
 
-		<div class="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[1fr_320px]">
+		<div class="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[1fr_330px]">
 			<div class="order-1">
-				<BoardCanvas onselect={(id) => (selectedTile = id)} />
+				<div
+					class="rounded-3xl border-2 border-emerald-700/25 bg-white p-1.5 shadow-[0_0_40px_-12px_rgba(4,120,87,0.35)]"
+				>
+					<div class="overflow-hidden rounded-2xl">
+						<ClickSpark sparkColor="#d97706" sparkCount={8} sparkRadius={28} duration={500}>
+							<BoardCanvas onselect={(id) => (selectedTile = id)} />
+						</ClickSpark>
+					</div>
+				</div>
 			</div>
 			<div class="order-2 flex flex-col gap-4 lg:col-start-2 lg:row-span-2">
-				<PlayerList />
-				<ActionPanel />
+				<section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+					<PlayerList />
+				</section>
+				<section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+					<ActionPanel />
+				</section>
 			</div>
 			{#if gameStore.gameState}
-				<div class="order-3 rounded-2xl bg-white p-4 shadow lg:col-start-1">
-					<h2 class="mb-1 font-semibold">খেলার লগ</h2>
-					<ul class="max-h-32 space-y-0.5 overflow-y-auto text-sm text-gray-700">
-						{#each [...gameStore.gameState.logs].reverse().slice(0, 20) as log}
-							<li>{log}</li>
-						{/each}
-					</ul>
+				<div class="order-3 lg:col-start-1">
+					<section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+						<h2 class="mb-2 text-sm font-semibold tracking-wide text-emerald-800">
+							✨ খেলার লগ
+						</h2>
+						<ul class="max-h-36 space-y-1.5 overflow-y-auto text-sm">
+							{#each logs as log, i (i + ':' + log)}
+								<li
+									class="{i === 0
+										? 'anim-log-in rounded-lg border border-emerald-600/20 bg-emerald-50 px-2.5 py-1 text-emerald-900'
+										: 'px-2.5 py-0.5 text-slate-500'}"
+								>
+									{log}
+								</li>
+							{/each}
+						</ul>
+					</section>
 				</div>
 			{/if}
 		</div>
 		<footer class="mx-auto mt-4 max-w-6xl pb-6 text-center">
 			<button
-				class="rounded-lg border border-gray-300 px-3 py-1 text-xs text-gray-500 hover:bg-white hover:text-gray-700"
+				class="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-500 transition hover:border-slate-400 hover:text-slate-700"
 				onclick={handleLeave}
 				title="ঘর ছেড়ে লবিতে ফিরুন (আবার যোগ দিতে একই নাম ও রুম কোড লাগবে)"
 			>
