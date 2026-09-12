@@ -75,6 +75,8 @@ type GameState struct {
 	Players             []*Player       `json:"players"`
 	Logs                []string        `json:"logs"`
 	WinnerID            string          `json:"winnerId,omitempty"`
+	// BuyUnlocked is true once every seated player has finished one turn.
+	BuyUnlocked         bool            `json:"buyUnlocked"`
 }
 
 // Message is a generic client <-> server envelope.

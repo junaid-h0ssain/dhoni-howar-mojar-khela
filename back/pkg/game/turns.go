@@ -31,6 +31,8 @@ func (e *GameEngine) StartGame() (*Outcome, error) {
 	e.State.CurrentTurnPlayerID = e.State.HostID
 	e.State.TurnPhase = models.PhaseRoll
 	e.doublesCount = 0
+	e.turnsTaken = map[string]int{}
+	e.RefreshBuyUnlocked()
 	// Fresh entropy per game: a new game must never inherit the deck order
 	// dealt at room creation. A dedicated source keeps seeded-test dice
 	// streams untouched.
@@ -116,7 +118,9 @@ func (e *GameEngine) AutoEndIfNoAction(playerID string, o *Outcome) {
 		return
 	}
 	p := e.FindPlayer(playerID)
-	if p == nil || e.canBuyLandedTile(p) {
+	// While the first-round buy lock holds there is never anything to
+	// decide after a roll, so the turn passes on its own.
+	if p == nil || (e.buyUnlocked() && e.canBuyLandedTile(p)) {
 		return
 	}
 	e.AppendLog(fmt.Sprintf("%s-এর আর কোনো কাজ নেই — দান শেষ হয়েছে।", p.Name))

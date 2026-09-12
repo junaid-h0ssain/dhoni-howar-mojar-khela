@@ -70,6 +70,10 @@ type GameEngine struct {
 	chestDeck    []int
 	chancePos    int
 	chestPos     int
+	// turnsTaken counts completed turns per player. Buying stays locked
+	// until every seated, connected, non-bankrupt player has finished at
+	// least one turn ("one round").
+	turnsTaken map[string]int
 	// fixedDice queues exact rolls consumed before the RNG (tests only).
 	fixedDice [][2]int
 }
@@ -84,6 +88,7 @@ func NewEngineWithSeed(state *models.GameState, seed int64) *GameEngine {
 	e := &GameEngine{State: state, rng: rand.New(rand.NewSource(seed))}
 	e.chanceDeck = shuffledDeck(len(chanceCards), e.rng)
 	e.chestDeck = shuffledDeck(len(chestCards), e.rng)
+	e.turnsTaken = map[string]int{}
 	return e
 }
 
@@ -252,10 +257,20 @@ func (e *GameEngine) alivePlayers() []*models.Player {
 // they cannot roll it — the turn skips straight past them. If every remaining
 // player is offline, the turn is left untouched so the game pauses instead of
 // spinning; it resumes as soon as someone reconnects.
+//
+// The outgoing holder counts as having completed a turn (played, auto-passed,
+// forfeited, or bankrupted out) for the first-round buy lock.
 func (e *GameEngine) advanceTurn() {
 	alive := e.alivePlayers()
 	if len(alive) == 0 {
 		return
+	}
+	lockedBefore := !e.buyUnlocked()
+	if id := e.State.CurrentTurnPlayerID; id != "" {
+		if e.turnsTaken == nil {
+			e.turnsTaken = map[string]int{}
+		}
+		e.turnsTaken[id]++
 	}
 	idx := -1
 	for i, p := range e.State.Players {
@@ -270,10 +285,34 @@ func (e *GameEngine) advanceTurn() {
 			e.State.CurrentTurnPlayerID = next.ID
 			e.State.TurnPhase = models.PhaseRoll
 			e.doublesCount = 0
+			if lockedBefore && e.buyUnlocked() {
+				e.AppendLog("🎉 প্রথম রাউন্ড শেষ — এখন থেকে সম্পত্তি কেনা যাবে!")
+			}
 			return
 		}
 	}
 	// No online player available: keep the turn where it is (paused).
+}
+
+// buyUnlocked reports whether the first round is complete: every seated,
+// non-bankrupt, connected player has finished at least one turn. Offline
+// seats never block the game.
+func (e *GameEngine) buyUnlocked() bool {
+	for _, p := range e.State.Players {
+		if p.IsBankrupt || !p.IsConnected {
+			continue
+		}
+		if e.turnsTaken[p.ID] < 1 {
+			return false
+		}
+	}
+	return true
+}
+
+// RefreshBuyUnlocked syncs the broadcast flag with the live predicate.
+// The room layer calls this on every state broadcast.
+func (e *GameEngine) RefreshBuyUnlocked() {
+	e.State.BuyUnlocked = e.buyUnlocked()
 }
 
 // payOrBankrupt transfers amount from payer to creditorID ("bank" = the bank).
