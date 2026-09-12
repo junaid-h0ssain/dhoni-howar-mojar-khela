@@ -2,9 +2,7 @@ package game
 
 import (
 	"fmt"
-	"math/rand"
 	"strings"
-	"time"
 
 	"backend/pkg/models"
 )
@@ -31,12 +29,11 @@ func (e *GameEngine) StartGame() (*Outcome, error) {
 	e.State.CurrentTurnPlayerID = e.State.HostID
 	e.State.TurnPhase = models.PhaseRoll
 	e.doublesCount = 0
-	e.turnsTaken = map[string]int{}
-	e.RefreshBuyUnlocked()
-	// Fresh entropy per game: a new game must never inherit the deck order
-	// dealt at room creation. A dedicated source keeps seeded-test dice
-	// streams untouched.
-	e.reshuffleDecks(rand.New(rand.NewSource(time.Now().UnixNano())))
+	e.AppendLog("খেলা শুরু হয়েছে!")
+	// Fresh shuffle per game: a new game never inherits the deck order
+	// dealt at room creation. Drawn from the engine RNG so seeded tests
+	// stay fully deterministic (production engines are time-seeded).
+	e.reshuffleDecks(e.rng)
 	e.AppendLog("খেলা শুরু হয়েছে!")
 	return &Outcome{}, nil
 }
@@ -118,9 +115,9 @@ func (e *GameEngine) AutoEndIfNoAction(playerID string, o *Outcome) {
 		return
 	}
 	p := e.FindPlayer(playerID)
-	// While the first-round buy lock holds there is never anything to
-	// decide after a roll, so the turn passes on its own.
-	if p == nil || (e.buyUnlocked() && e.canBuyLandedTile(p)) {
+	// While the player hasn't completed their first lap there is never
+	// anything to decide after a roll, so the turn passes on its own.
+	if p == nil || (p.LapsCompleted >= 1 && e.canBuyLandedTile(p)) {
 		return
 	}
 	e.AppendLog(fmt.Sprintf("%s-এর আর কোনো কাজ নেই — দান শেষ হয়েছে।", p.Name))
@@ -179,6 +176,8 @@ func (e *GameEngine) rollInJail(p *models.Player, d1, d2 int, o *Outcome) {
 }
 
 // movePlayer advances around the 40-tile loop, paying GO salary on pass/land.
+// Passing GO via dice movement completes a board lap for the buy lock
+// (card teleports don't count).
 func (e *GameEngine) movePlayer(p *models.Player, steps int, o *Outcome) {
 	from := p.Position
 	to := (from + steps) % 40
@@ -189,6 +188,10 @@ func (e *GameEngine) movePlayer(p *models.Player, steps int, o *Outcome) {
 		p.Cash += GoSalary
 		o.PassedGo = true
 		e.AppendLog(fmt.Sprintf("%s শুরু ঘর পার হয়ে ৳%d পেয়েছেন।", p.Name, GoSalary))
+		p.LapsCompleted++
+		if p.LapsCompleted == 1 {
+			e.AppendLog(fmt.Sprintf("🎉 %s বোর্ডের প্রথম রাউন্ড শেষ করেছেন — এখন সম্পত্তি কিনতে পারবেন!", p.Name))
+		}
 	}
 	p.Position = to
 }

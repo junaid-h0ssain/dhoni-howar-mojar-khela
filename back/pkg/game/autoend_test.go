@@ -107,7 +107,7 @@ func TestAutoEndTaxTileLateGame(t *testing.T) {
 // they can choose to buy — and buying the last action must then auto-advance.
 func TestAutoEndHoldsBuyableIdleTile(t *testing.T) {
 	e, host, guest := newStartedEngine(104)
-	completeFirstRound(e)
+	unlockBuying(e)
 	host.Cash = 5000
 	host.Position = 0 // +3 -> tile 3 (Sitakund, 60, unowned)
 	e.SetFixedDice([][2]int{{1, 2}})

@@ -42,6 +42,9 @@ type Player struct {
 	JailTurns   int    `json:"jailTurns"`
 	IsBankrupt  bool   `json:"isBankrupt"`
 	IsConnected bool   `json:"isConnected"`
+	// LapsCompleted counts full board circuits (passing GO) via dice
+	// movement. Buying unlocks per player after their first lap.
+	LapsCompleted int `json:"lapsCompleted"`
 }
 
 // GameStatus is the room lifecycle state.
@@ -75,8 +78,6 @@ type GameState struct {
 	Players             []*Player       `json:"players"`
 	Logs                []string        `json:"logs"`
 	WinnerID            string          `json:"winnerId,omitempty"`
-	// BuyUnlocked is true once every seated player has finished one turn.
-	BuyUnlocked         bool            `json:"buyUnlocked"`
 }
 
 // Message is a generic client <-> server envelope.

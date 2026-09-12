@@ -124,7 +124,6 @@ func (r *Room) emit(eventType string, payload map[string]any) {
 
 // emitState broadcasts the full authoritative state.
 func (r *Room) emitState() {
-	r.Engine.RefreshBuyUnlocked()
 	stateBytes, _ := json.Marshal(r.Engine.State)
 	var payload map[string]any
 	_ = json.Unmarshal(stateBytes, &payload)
