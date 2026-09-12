@@ -143,8 +143,12 @@
 						<input
 							class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 font-mono text-lg tracking-[0.3em] text-slate-900 uppercase placeholder:text-slate-400 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
 							bind:value={roomCode}
-							placeholder="BD8921"
-							maxlength={6}
+							placeholder="1234"
+							maxlength={4}
+							inputmode="numeric"
+							pattern="[0-9]*"
+							autocomplete="one-time-code"
+							enterkeyhint="go"
 						/>
 					</label>
 					<button

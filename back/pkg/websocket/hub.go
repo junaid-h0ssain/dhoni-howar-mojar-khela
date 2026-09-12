@@ -26,15 +26,15 @@ func NewHub(sessions store.SessionStore) *Hub {
 
 var roomCodeCharset = []byte("0123456789")
 
-// GenerateRoomCode returns a unique 6-digit numeric code (§6.1).
+// GenerateRoomCode returns a unique 4-digit numeric code (§6.1).
 func (h *Hub) GenerateRoomCode() string {
 	for {
-		b := make([]byte, 6)
+		b := make([]byte, 4)
 		if _, err := rand.Read(b); err != nil {
 			// Fallback to numeric slice of UUID on CSPRNG failure (extremely unlikely).
 			u := strings.ReplaceAll(uuid.NewString(), "-", "")
-			digits := make([]byte, 0, 6)
-			for i := 0; i < len(u) && len(digits) < 6; i++ {
+			digits := make([]byte, 0, 4)
+			for i := 0; i < len(u) && len(digits) < 4; i++ {
 				// Map each hex char to a digit 0-9.
 				digits = append(digits, byte('0'+int(u[i])%10))
 			}
