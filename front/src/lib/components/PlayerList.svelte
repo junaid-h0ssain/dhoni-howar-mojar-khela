@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { gameStore } from '$lib/stores/gameStore.svelte';
-	import CountUp from '$lib/components/svelte-bits/CountUp.svelte';
+	import CashDisplay from '$lib/components/CashDisplay.svelte';
 
 	/** Property + house counts per player, derived from authoritative tiles. */
 	function holdings(playerId: string): { props: number; houses: number } {
@@ -40,14 +40,7 @@
 						style:background-color={p.tokenColor}
 					></span>
 					<span class="font-medium text-slate-800">{p.name}</span>
-					<span class="font-mono text-emerald-700">
-						৳{#key p.cash}<CountUp
-								to={p.cash}
-								from={Math.max(0, p.cash - 200)}
-								duration={0.9}
-								separator=","
-							/>{/key}
-					</span>
+					<CashDisplay cash={p.cash} />
 					<span class="text-slate-500">· 🏠{h.props}{#if h.houses > 0}+{h.houses}{/if}</span>
 					{#if isTurn}
 						<span class="anim-glow-drift rounded-full bg-amber-500/20 px-1.5 text-xs font-bold text-amber-800">
