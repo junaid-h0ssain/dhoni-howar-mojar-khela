@@ -2,7 +2,9 @@ package game
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
+	"time"
 
 	"backend/pkg/models"
 )
@@ -29,6 +31,10 @@ func (e *GameEngine) StartGame() (*Outcome, error) {
 	e.State.CurrentTurnPlayerID = e.State.HostID
 	e.State.TurnPhase = models.PhaseRoll
 	e.doublesCount = 0
+	// Fresh entropy per game: a new game must never inherit the deck order
+	// dealt at room creation. A dedicated source keeps seeded-test dice
+	// streams untouched.
+	e.reshuffleDecks(rand.New(rand.NewSource(time.Now().UnixNano())))
 	e.AppendLog("খেলা শুরু হয়েছে!")
 	return &Outcome{}, nil
 }

@@ -87,6 +87,15 @@ func NewEngineWithSeed(state *models.GameState, seed int64) *GameEngine {
 	return e
 }
 
+// reshuffleDecks deals fresh card orders from the given source and rewinds
+// both draw positions, so a game never inherits a stale deck.
+func (e *GameEngine) reshuffleDecks(rng *rand.Rand) {
+	e.chanceDeck = shuffledDeck(len(chanceCards), rng)
+	e.chestDeck = shuffledDeck(len(chestCards), rng)
+	e.chancePos = 0
+	e.chestPos = 0
+}
+
 func shuffledDeck(n int, rng *rand.Rand) []int {
 	d := make([]int, n)
 	for i := range d {
