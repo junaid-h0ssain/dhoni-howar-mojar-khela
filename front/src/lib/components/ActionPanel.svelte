@@ -30,8 +30,8 @@
 	const buildLabel = $derived(
 		!buildTile ? '' : buildTile.houses >= 4 ? 'হোটেল তৈরি করুন' : 'বাড়ি তৈরি করুন'
 	);
-	// Older servers omit buyUnlocked — only an explicit false locks buying.
-	const buyLocked = $derived(gameStore.gameState?.buyUnlocked === false);
+	// Older servers omit lapsCompleted — only an explicit 0 locks buying.
+	const buyLocked = $derived((gameStore.me?.lapsCompleted ?? 1) < 1);
 
 	$effect(() => {
 		// Default the dropdown to the first buildable tile.
@@ -135,7 +135,7 @@
 		<div class="flex flex-col gap-2">
 			{#if buyLocked}
 				<p class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
-					🔒 প্রথম রাউন্ড চলছে — সবার একবার চাল শেষ হলে সম্পত্তি কেনা যাবে।
+					🔒 বোর্ডের প্রথম রাউন্ড শেষ করুন (GO পার হোন) — তারপর সম্পত্তি কেনা যাবে।
 				</p>
 			{:else}
 				<button

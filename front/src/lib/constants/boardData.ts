@@ -40,6 +40,9 @@ export interface Player {
 	jailTurns: number;
 	isBankrupt: boolean;
 	isConnected: boolean;
+	// Full board circuits (passing GO). Buying unlocks after the first lap.
+	// Absent on older servers — treat undefined as unlocked.
+	lapsCompleted?: number;
 }
 
 export type GameStatus = 'LOBBY' | 'IN_GAME' | 'FINISHED';
@@ -56,9 +59,6 @@ export interface GameState {
 	players: Player[];
 	logs: string[];
 	winnerId?: string;
-	// True once every seated player has finished one turn (buy lock lifted).
-	// Absent on older servers — treat undefined as unlocked.
-	buyUnlocked?: boolean;
 }
 
 /** Client → server action types (§9). */
