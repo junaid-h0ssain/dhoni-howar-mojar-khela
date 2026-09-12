@@ -1,6 +1,7 @@
 package game
 
 import (
+	"strings"
 	"testing"
 
 	"backend/pkg/models"
@@ -32,6 +33,18 @@ func mustErrCode(t *testing.T, err error, code string) {
 	if ee.Code != code {
 		t.Fatalf("expected code %s, got %s (%s)", code, ee.Code, ee.Msg)
 	}
+}
+
+// completeFirstRound marks every seated player as having finished a turn,
+// simulating a completed opening round for tests that need buying unlocked.
+func completeFirstRound(e *GameEngine) {
+	if e.turnsTaken == nil {
+		e.turnsTaken = map[string]int{}
+	}
+	for _, p := range e.State.Players {
+		e.turnsTaken[p.ID] = 1
+	}
+	e.RefreshBuyUnlocked()
 }
 
 func TestStartGameValidation(t *testing.T) {
@@ -107,6 +120,7 @@ func TestPassGoPaysSalary(t *testing.T) {
 
 func TestBuyProperty(t *testing.T) {
 	e, host, guest := newStartedEngine(4)
+	completeFirstRound(e)
 	e.State.TurnPhase = models.PhaseAction
 	host.Position = 1
 	o, err := e.BuyProperty(host.ID, 1)
@@ -132,6 +146,83 @@ func TestBuyProperty(t *testing.T) {
 	host.Cash = 10
 	_, err = e.BuyProperty(host.ID, 39)
 	mustErrCode(t, err, "INSUFFICIENT_FUNDS")
+}
+
+// Buying stays locked until every seated player has finished one turn.
+func TestFirstRoundBuyLocked(t *testing.T) {
+	e, host, _ := newStartedEngine(200)
+	e.State.TurnPhase = models.PhaseAction
+	host.Position = 1
+	_, err := e.BuyProperty(host.ID, 1)
+	mustErrCode(t, err, "ROUND_NOT_COMPLETE")
+	if e.State.Tiles[1].OwnerID != "" {
+		t.Fatal("locked buy must not transfer ownership")
+	}
+}
+
+// A played opening round (real EndTurn calls) unlocks buying.
+func TestBuyUnlocksAfterFullRound(t *testing.T) {
+	e, host, guest := newStartedEngine(201)
+	e.State.TurnPhase = models.PhaseAction
+	if _, err := e.EndTurn(host.ID); err != nil {
+		t.Fatalf("host end: %v", err)
+	}
+	if e.buyUnlocked() {
+		t.Fatal("round must stay locked until every player ends a turn")
+	}
+	e.State.TurnPhase = models.PhaseAction
+	if _, err := e.EndTurn(guest.ID); err != nil {
+		t.Fatalf("guest end: %v", err)
+	}
+	e.RefreshBuyUnlocked()
+	if !e.State.BuyUnlocked {
+		t.Fatal("buying must unlock after a full round")
+	}
+	e.State.TurnPhase = models.PhaseAction
+	host.Position = 1
+	if _, err := e.BuyProperty(host.ID, 1); err != nil {
+		t.Fatalf("buy after unlock: %v", err)
+	}
+	found := false
+	for _, line := range e.State.Logs {
+		if strings.Contains(line, "প্রথম রাউন্ড শেষ") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected unlock announcement in logs")
+	}
+}
+
+// A mid-game joiner re-locks buying until they finish their first turn.
+func TestMidGameJoinRelocksBuying(t *testing.T) {
+	e, _, _ := newStartedEngine(202)
+	completeFirstRound(e)
+	if !e.buyUnlocked() {
+		t.Fatal("expected unlocked after first round")
+	}
+	if _, err := e.AddPlayer("p-new", "নতুন"); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	e.RefreshBuyUnlocked()
+	if e.buyUnlocked() {
+		t.Fatal("new joiner without a turn must re-lock buying")
+	}
+}
+
+// Landing on a buyable tile during the lock auto-advances (nothing to decide).
+func TestAutoEndBuyableTileWhileLocked(t *testing.T) {
+	e, host, guest := newStartedEngine(203)
+	host.Position = 0 // +3 -> tile 3 (Sitakund, 60, unowned, affordable)
+	e.SetFixedDice([][2]int{{1, 2}})
+	o, err := e.RollDice(host.ID)
+	if err != nil {
+		t.Fatalf("roll: %v", err)
+	}
+	e.AutoEndIfNoAction(host.ID, o)
+	if !o.TurnAdvanced || e.State.CurrentTurnPlayerID != guest.ID {
+		t.Fatalf("locked buyable landing must auto-advance: %+v", o)
+	}
 }
 
 func TestRentAndFullGroupDouble(t *testing.T) {
@@ -635,7 +726,7 @@ func playSimStep(t *testing.T, e *GameEngine, st *models.GameState) {
 		}
 	case models.PhaseAction:
 		tile := st.Tiles[cur.Position]
-		if tile != nil && tile.OwnerID == "" && cur.Cash >= tile.Price &&
+		if e.buyUnlocked() && tile != nil && tile.OwnerID == "" && cur.Cash >= tile.Price &&
 			(tile.Type == models.TileProperty || tile.Type == models.TileUtility || tile.Type == models.TileRailroad) {
 			if _, err := e.BuyProperty(cur.ID, cur.Position); err != nil {
 				t.Fatalf("buy: %v", err)
