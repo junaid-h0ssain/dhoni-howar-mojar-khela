@@ -40,6 +40,9 @@ export interface Player {
 	jailTurns: number;
 	isBankrupt: boolean;
 	isConnected: boolean;
+	// Full board circuits (passing GO). Buying unlocks after the first lap.
+	// Absent on older servers — treat undefined as unlocked.
+	lapsCompleted?: number;
 }
 
 export type GameStatus = 'LOBBY' | 'IN_GAME' | 'FINISHED';

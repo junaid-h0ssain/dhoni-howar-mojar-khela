@@ -42,6 +42,9 @@ type Player struct {
 	JailTurns   int    `json:"jailTurns"`
 	IsBankrupt  bool   `json:"isBankrupt"`
 	IsConnected bool   `json:"isConnected"`
+	// LapsCompleted counts full board circuits (passing GO) via dice
+	// movement. Buying unlocks per player after their first lap.
+	LapsCompleted int `json:"lapsCompleted"`
 }
 
 // GameStatus is the room lifecycle state.

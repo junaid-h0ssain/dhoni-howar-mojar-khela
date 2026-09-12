@@ -2,6 +2,7 @@
 	import { gameStore } from '$lib/stores/gameStore.svelte';
 	import { send } from '$lib/utils/websocket';
 	import { diceFace } from '$lib/utils/dice';
+	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 
 	let buildTileId = $state<number | null>(null);
 	let adminD1 = $state(6);
@@ -29,6 +30,8 @@
 	const buildLabel = $derived(
 		!buildTile ? '' : buildTile.houses >= 4 ? 'হোটেল তৈরি করুন' : 'বাড়ি তৈরি করুন'
 	);
+	// Older servers omit lapsCompleted — only an explicit 0 locks buying.
+	const buyLocked = $derived((gameStore.me?.lapsCompleted ?? 1) < 1);
 
 	$effect(() => {
 		// Default the dropdown to the first buildable tile.
@@ -47,52 +50,68 @@
 	}
 </script>
 
-<div class="rounded-2xl bg-white p-4 shadow">
-	<h2 class="mb-2 font-semibold">চাল</h2>
+<div>
+	<h2 class="mb-2 text-sm font-semibold tracking-wide text-amber-700">🎯 চাল</h2>
 	{#if gameStore.gameState?.status === 'IN_GAME'}
 		{@const [d1, d2] = gameStore.gameState.dice}
-		<p class="mb-2 text-center text-2xl tracking-widest" title="সর্বশেষ দান">
-			{diceFace(d1)}{diceFace(d2)}
-			<span class="ml-1 align-middle text-sm text-gray-500">= {d1 + d2}</span>
-		</p>
+		{#key `${d1}-${d2}`}
+			<p class="anim-dice-pop mb-2 text-center text-3xl tracking-widest" title="সর্বশেষ দান">
+				{diceFace(d1)}{diceFace(d2)}
+				<span class="ml-1 align-middle text-sm text-slate-500">= {d1 + d2}</span>
+			</p>
+		{/key}
 	{/if}
 	{#if !gameStore.gameState}
-		<p class="text-sm text-gray-500">ঘরে যোগ দিন।</p>
+		<p class="text-sm text-slate-500">ঘরে যোগ দিন।</p>
 	{:else if gameStore.gameState.status === 'LOBBY'}
 		{#if gameStore.isHost}
-			<button
-				class="w-full rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700"
-				onclick={() => send('START_GAME')}
-			>
-				খেলা শুরু করুন
-			</button>
+			<ClickSpark sparkColor="#d97706" sparkCount={10} sparkRadius={24}>
+				<button
+					class="w-full rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-white transition hover:bg-amber-400 active:scale-95"
+					onclick={() => send('START_GAME')}
+				>
+					🚀 খেলা শুরু করুন
+				</button>
+			</ClickSpark>
+			<p class="mt-2 text-center text-xs text-slate-500">
+				সবাই তৈরি? বাজি ধরার সময় এসেছে!
+			</p>
 		{:else}
-			<p class="text-sm text-gray-500">হোস্ট খেলা শুরু করার অপেক্ষায়…</p>
+			<p class="anim-glow-drift rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm text-slate-600">
+				হোস্ট খেলা শুরু করার অপেক্ষায়… ☕
+			</p>
 		{/if}
 	{:else if gameStore.gameState.status === 'FINISHED'}
-		<p class="text-lg">🏆 বিজয়ী: {gameStore.gameState.players.find((p) => p.id === gameStore.gameState?.winnerId)?.name ?? '—'}</p>
+		{@const winner = gameStore.gameState.players.find((p) => p.id === gameStore.gameState?.winnerId)}
+		<div class="text-center">
+			<p class="anim-trophy text-5xl">🏆</p>
+			<p class="mt-1 text-2xl font-bold text-amber-600">{winner?.name ?? '—'}</p>
+			<p class="text-sm text-slate-600">মহাজনি চ্যাম্পিয়ন! 🎉</p>
+		</div>
 	{:else if gameStore.canRoll}
-		<button
-			class="w-full rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
-			onclick={() => send('ROLL_DICE')}
-		>
-			দান চালুন (Roll Dice)
-		</button>
+		<ClickSpark sparkColor="#059669" sparkCount={12} sparkRadius={30}>
+			<button
+				class="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-lg font-bold text-white transition hover:bg-emerald-500 active:scale-95"
+				onclick={() => send('ROLL_DICE')}
+			>
+				🎲 দান চালুন!
+			</button>
+		</ClickSpark>
 		{#if gameStore.isAdmin}
-			<div class="mt-2 rounded-lg border border-red-300 bg-red-50 p-2">
-				<p class="mb-1 text-xs font-semibold text-red-800">🔧 Admin: পাশা নিয়ন্ত্রণ</p>
+			<div class="mt-2 rounded-xl border border-red-300 bg-red-50 p-2">
+				<p class="mb-1 text-xs font-semibold text-red-700">🔧 Admin: পাশা নিয়ন্ত্রণ</p>
 				<div class="mb-2 flex gap-2">
-					<label class="flex-1 text-xs">
+					<label class="flex-1 text-xs text-slate-600">
 						পাশা ১
-						<select class="mt-0.5 w-full rounded-lg border px-2 py-1.5 text-sm" bind:value={adminD1}>
+						<select class="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900" bind:value={adminD1}>
 							{#each [1, 2, 3, 4, 5, 6] as n}
 								<option value={n}>{n}</option>
 							{/each}
 						</select>
 					</label>
-					<label class="flex-1 text-xs">
+					<label class="flex-1 text-xs text-slate-600">
 						পাশা ২
-						<select class="mt-0.5 w-full rounded-lg border px-2 py-1.5 text-sm" bind:value={adminD2}>
+						<select class="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900" bind:value={adminD2}>
 							{#each [1, 2, 3, 4, 5, 6] as n}
 								<option value={n}>{n}</option>
 							{/each}
@@ -100,7 +119,7 @@
 					</label>
 				</div>
 				<button
-					class="w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+					class="w-full rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 active:scale-95"
 					onclick={() => send('ROLL_DICE', { d1: adminD1, d2: adminD2 })}
 				>
 					নির্দিষ্ট দান ({adminD1} + {adminD2})
@@ -109,30 +128,38 @@
 		{/if}
 	{:else if gameStore.canAct}
 		{#if gameStore.me?.inJail}
-			<p class="mb-2 text-sm text-gray-600">জেলে আছেন — জোড়া ফেলে মুক্ত হোন অথবা দান শেষ করুন।</p>
+			<p class="mb-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+				🔒 জেলে আছেন — জোড়া ফেলে মুক্ত হোন অথবা দান শেষ করুন।
+			</p>
 		{/if}
 		<div class="flex flex-col gap-2">
-			<button
-				class="rounded-lg bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
-				onclick={() => send('BUY_PROPERTY', { tileId: gameStore.me?.position ?? 0 })}
-			>
-				সম্পত্তি কিনুন
-			</button>
+			{#if buyLocked}
+				<p class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
+					🔒 বোর্ডের প্রথম রাউন্ড শেষ করুন (GO পার হোন) — তারপর সম্পত্তি কেনা যাবে।
+				</p>
+			{:else}
+				<button
+					class="rounded-xl bg-emerald-600 px-4 py-2.5 font-bold text-white transition hover:bg-emerald-500 active:scale-95"
+					onclick={() => send('BUY_PROPERTY', { tileId: gameStore.me?.position ?? 0 })}
+				>
+					💰 সম্পত্তি কিনুন
+				</button>
+			{/if}
 			{#if !allSold}
-				<p class="rounded-lg bg-gray-100 px-3 py-2 text-center text-xs text-gray-600">
+				<p class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
 					সব সম্পত্তি বিক্রি হলে বাড়ি/হোটেল তৈরি করা যাবে ({unsoldCount}টি বাকি)।
 				</p>
 			{:else if myBuildable.length === 0}
-				<p class="rounded-lg bg-gray-100 px-3 py-2 text-center text-xs text-gray-600">
+				<p class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
 					তৈরি করার মতো সম্পত্তি নেই (পুরো গ্রুপ + খালি জায়গা থাকতে হবে)।
 				</p>
 			{:else}
-				<div class="rounded-lg border border-purple-200 bg-purple-50 p-2">
-					<p class="mb-1 text-xs font-medium text-purple-900">
-						বাড়ি → হোটেল (সর্বোচ্চ: ৪ বাড়ি, তারপর হোটেল)
+				<div class="rounded-xl border border-purple-300 bg-purple-50 p-2">
+					<p class="mb-1 text-xs font-medium text-purple-800">
+						🏠 বাড়ি → হোটেল (সর্বোচ্চ: ৪ বাড়ি, তারপর হোটেল)
 					</p>
 					<select
-						class="mb-2 w-full rounded-lg border border-purple-300 bg-white px-2 py-1.5 text-sm"
+						class="mb-2 w-full rounded-lg border border-purple-300 bg-white px-2 py-1.5 text-sm text-slate-900"
 						bind:value={buildTileId}
 					>
 						{#each myBuildable as t (t.id)}
@@ -142,7 +169,7 @@
 						{/each}
 					</select>
 					<button
-						class="w-full rounded-lg bg-purple-600 px-4 py-2 text-white hover:bg-purple-700 disabled:opacity-50"
+						class="w-full rounded-xl bg-purple-600 px-4 py-2 font-bold text-white transition hover:bg-purple-500 active:scale-95 disabled:opacity-50"
 						disabled={buildTileId == null}
 						onclick={() => {
 							if (buildTileId != null) send('BUILD_HOUSE', { tileId: buildTileId });
@@ -153,25 +180,28 @@
 				</div>
 			{/if}
 			<button
-				class="rounded-lg bg-amber-600 px-4 py-2 text-white hover:bg-amber-700"
+				class="rounded-xl bg-amber-600 px-4 py-2.5 font-bold text-white transition hover:bg-amber-500 active:scale-95"
 				onclick={() => send('END_TURN')}
 			>
-				দান শেষ করুন
+				দান শেষ করুন ⏭️
 			</button>
 		</div>
 	{:else if gameStore.canEndTurn}
 		{#if gameStore.me?.inJail}
-			<p class="mb-2 text-sm text-gray-600">জেলে আছেন ({gameStore.me.jailTurns + 1}/3) — পরের চালে জোড়া ফেলার চেষ্টা করুন।</p>
+			<p class="mb-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+				🔒 জেলে আছেন ({gameStore.me.jailTurns + 1}/3) — পরের চালে জোড়া ফেলার চেষ্টা করুন।
+			</p>
 		{/if}
 		<button
-			class="w-full rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white hover:bg-amber-700"
+			class="w-full rounded-xl bg-amber-600 px-4 py-2.5 font-bold text-white transition hover:bg-amber-500 active:scale-95"
 			onclick={() => send('END_TURN')}
 		>
-			দান শেষ করুন
+			দান শেষ করুন ⏭️
 		</button>
 	{:else}
-		<p class="text-sm text-gray-500">
-			{gameStore.currentPlayer?.name ?? '—'} এর চাল চলছে…
+		<p class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm text-slate-600">
+			<span class="font-semibold text-amber-700">{gameStore.currentPlayer?.name ?? '—'}</span>
+			এর চাল চলছে… 👀
 		</p>
 	{/if}
 </div>

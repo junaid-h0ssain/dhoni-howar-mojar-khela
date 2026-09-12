@@ -7,11 +7,15 @@ import (
 )
 
 // BuyProperty purchases the tile the player stands on (§13: IN_GAME, current
-// player, ACTION phase, purchasable, affordable — all re-validated here).
+// player, ACTION phase, first board lap done, purchasable, affordable —
+// all re-validated here).
 func (e *GameEngine) BuyProperty(playerID string, tileID int) (*Outcome, error) {
 	p, err := e.requireTurn(playerID, models.PhaseAction)
 	if err != nil {
 		return nil, err
+	}
+	if p.LapsCompleted < 1 {
+		return nil, errEngine("ROUND_NOT_COMPLETE", "বোর্ডের প্রথম রাউন্ড (GO পার হওয়া) শেষ না হওয়া পর্যন্ত সম্পত্তি কেনা যাবে না।")
 	}
 	t := e.State.Tiles[tileID]
 	if t == nil {
