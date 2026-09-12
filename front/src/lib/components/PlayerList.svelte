@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { gameStore } from '$lib/stores/gameStore.svelte';
 	import CashDisplay from '$lib/components/CashDisplay.svelte';
+	import { tileIcon } from '$lib/utils/tileIcons';
 
 	/** Property + house counts per player, derived from authoritative tiles. */
 	function holdings(playerId: string): { props: number; houses: number } {
@@ -18,6 +19,14 @@
 	}
 
 	const tokenShapes = ['circle', 'square', 'triangle', 'diamond', 'star', 'hexagon', 'pentagon', 'plus', 'ring', 'shield'];
+
+	/** Where a player token sits, e.g. "🚂 পাহাড়তলী স্টেশন". */
+	function locationOf(position: number): string {
+		const t = gameStore.gameState?.tiles[position];
+		if (!t) return `ঘর ${position}`;
+		const icon = tileIcon(t);
+		return icon ? `${icon} ${t.nameBn}` : t.nameBn;
+	}
 </script>
 
 <div>
@@ -53,6 +62,9 @@
 					{#if p.isBankrupt}
 						<span class="rounded-full bg-red-100 px-1.5 text-xs text-red-700">💸 দেউলিয়া</span>
 					{/if}
+					<span class="w-full text-xs text-slate-500" title="বর্তমান অবস্থান">
+						📍 {locationOf(p.position)}
+					</span>
 				</li>
 			{/each}
 		</ul>

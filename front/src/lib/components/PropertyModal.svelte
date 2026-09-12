@@ -41,6 +41,11 @@
 			: 0
 	);
 	const utilMult = $derived(ownerUtilCount >= 2 ? 10 : 4);
+	const occupants = $derived(
+		tileId != null
+			? (gameStore.gameState?.players.filter((pl) => pl.position === tileId) ?? [])
+			: []
+	);
 </script>
 
 {#if tileId != null && tile}
@@ -82,6 +87,27 @@
 			</p>
 			{#if tile.type === 'PROPERTY'}
 				<p class="mt-1 text-sm text-slate-600">অবস্থা: {levelLabel}</p>
+			{/if}
+			{#if occupants.length > 0}
+				<div class="mt-2 text-sm">
+					<p class="font-medium text-slate-700">📍 এখানে আছে:</p>
+					<ul class="mt-1 flex flex-wrap gap-1.5">
+						{#each occupants as pl (pl.id)}
+							<li
+								class="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs"
+							>
+								<span
+									class="inline-block h-2.5 w-2.5 rounded-full"
+									style:background-color={pl.tokenColor}
+								></span>
+								<span class="font-medium text-slate-700">{pl.name}</span>
+								{#if pl.isBankrupt}
+									<span class="text-red-600">(দেউলিয়া)</span>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				</div>
 			{/if}
 			{#if tile.rentTiers}
 				<div class="mt-2 text-sm">

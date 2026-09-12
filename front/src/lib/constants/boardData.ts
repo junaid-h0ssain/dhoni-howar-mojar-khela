@@ -56,6 +56,9 @@ export interface GameState {
 	players: Player[];
 	logs: string[];
 	winnerId?: string;
+	// True once every seated player has finished one turn (buy lock lifted).
+	// Absent on older servers — treat undefined as unlocked.
+	buyUnlocked?: boolean;
 }
 
 /** Client → server action types (§9). */

@@ -30,6 +30,8 @@
 	const buildLabel = $derived(
 		!buildTile ? '' : buildTile.houses >= 4 ? 'হোটেল তৈরি করুন' : 'বাড়ি তৈরি করুন'
 	);
+	// Older servers omit buyUnlocked — only an explicit false locks buying.
+	const buyLocked = $derived(gameStore.gameState?.buyUnlocked === false);
 
 	$effect(() => {
 		// Default the dropdown to the first buildable tile.
@@ -131,12 +133,18 @@
 			</p>
 		{/if}
 		<div class="flex flex-col gap-2">
-			<button
-				class="rounded-xl bg-emerald-600 px-4 py-2.5 font-bold text-white transition hover:bg-emerald-500 active:scale-95"
-				onclick={() => send('BUY_PROPERTY', { tileId: gameStore.me?.position ?? 0 })}
-			>
-				💰 সম্পত্তি কিনুন
-			</button>
+			{#if buyLocked}
+				<p class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
+					🔒 প্রথম রাউন্ড চলছে — সবার একবার চাল শেষ হলে সম্পত্তি কেনা যাবে।
+				</p>
+			{:else}
+				<button
+					class="rounded-xl bg-emerald-600 px-4 py-2.5 font-bold text-white transition hover:bg-emerald-500 active:scale-95"
+					onclick={() => send('BUY_PROPERTY', { tileId: gameStore.me?.position ?? 0 })}
+				>
+					💰 সম্পত্তি কিনুন
+				</button>
+			{/if}
 			{#if !allSold}
 				<p class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
 					সব সম্পত্তি বিক্রি হলে বাড়ি/হোটেল তৈরি করা যাবে ({unsoldCount}টি বাকি)।
