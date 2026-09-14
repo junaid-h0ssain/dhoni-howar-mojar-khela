@@ -71,6 +71,17 @@
 			{#if tile.price}
 				<p class="mt-2 font-mono text-lg text-emerald-700">৳{tile.price}</p>
 			{/if}
+			{#if tile.mortgage}
+				<p class="mt-1 text-sm text-slate-600">
+					🏦 বন্ধক মূল্য: <b class="text-slate-800">৳{tile.mortgage}</b>
+					<span class="text-xs text-slate-400">(শুধু তথ্য)</span>
+				</p>
+			{/if}
+			{#if tile.type === 'PROPERTY' && tile.houseCost}
+				<p class="mt-1 text-sm text-slate-600">
+					🏠 প্রতি বাড়ির খরচ: <b class="text-slate-800">৳{tile.houseCost}</b>
+				</p>
+			{/if}
 			<p class="mt-1 flex items-center gap-2 text-sm text-slate-600">
 				<span>মালিক:</span>
 				{#if owner}
