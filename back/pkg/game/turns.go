@@ -123,7 +123,6 @@ func (e *GameEngine) AutoEndIfNoAction(playerID string, o *Outcome) {
 	if p == nil || ((p.LapsCompleted >= 1 && e.canBuyLandedTile(p)) || e.canBuildAnywhere(p)) {
 		return
 	}
-	e.AppendLog(fmt.Sprintf("%s-এর আর কোনো কাজ নেই — দান শেষ হয়েছে।", p.Name))
 	e.advanceTurn()
 	o.TurnAdvanced = true
 }
