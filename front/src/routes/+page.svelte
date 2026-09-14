@@ -17,8 +17,8 @@
 	}
 
 	onMount(() => {
-		// Reload / dropped connection: the store starts empty but the seat
-		// lives on the server for 120s — auto-RECONNECT to retain play state.
+		// Reload / dropped connection: the store starts empty but the seat and
+		// game live on the server for 24h — auto-RECONNECT to retain play state.
 		if (!gameStore.gameState && hasSavedSession()) {
 			connect({ resume: true });
 		}

@@ -6,7 +6,6 @@
 	import {
 		connect,
 		send,
-		hasSavedSession,
 		loadSavedSession,
 		loadLastRoomId,
 		reconnectSaved,

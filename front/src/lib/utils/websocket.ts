@@ -1,10 +1,11 @@
 // WebSocket bridge (§19): connection, auto-reconnect, session tokens,
 // event parsing → game store.
 //
-// Reconnect contract (§11): the server keeps each seat for 120s after a
-// disconnect. This bridge persists roomId + playerId + sessionToken in
-// localStorage so a reload / network drop can RECONNECT and retain the full
+// Reconnect contract (§11): seats and game snapshots persist server-side for
+// 24h, so a reload / app-switch / deploy can RECONNECT and retain the full
 // play state (cash, position, properties) instead of joining as a new player.
+// (The 120s window is only the gameplay grace before a stuck turn forfeits.)
+import { env } from '$env/dynamic/public';
 import { gameStore } from '$lib/stores/gameStore.svelte';
 import type { GameState, WsMessage } from '$lib/constants/boardData';
 
@@ -13,7 +14,9 @@ const ROOM_KEY = 'mahajoni.roomId';
 const PLAYER_KEY = 'mahajoni.playerId';
 const NAME_KEY = 'mahajoni.playerName';
 
-const WS_URL = 'wss://dhmk.onrender.com/ws';
+// Production endpoint. Overridden by PUBLIC_WS_URL at build/dev time;
+// local hostnames fall back to a local backend automatically.
+const PROD_WS_URL = 'wss://dhmk.onrender.com/ws';
 
 // Watchdog: server pings ~54s (pingPeriod); if no frame arrives within
 // WATCHDOG_MS the socket is half-open (common after phone sleep) — force a
@@ -32,7 +35,20 @@ let resumePending = false;
 let netListenersAttached = false;
 
 function getWsUrl(): string {
-	return WS_URL;
+	// Explicit env wins (e.g. PUBLIC_WS_URL=wss://dhmk.onrender.com/ws in
+	// production, PUBLIC_WS_URL=ws://localhost:8080/ws for local dev).
+	// Without it: local hostnames talk to a local backend, everything else
+	// uses production — so both setups work with zero config.
+	const configured = (env.PUBLIC_WS_URL ?? '').trim();
+	if (configured) return configured;
+	if (typeof window !== 'undefined') {
+		const host = window.location.hostname;
+		if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') {
+			const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+			return `${proto}://${host}:8080/ws`;
+		}
+	}
+	return PROD_WS_URL;
 }
 
 export interface SavedSession {
@@ -221,9 +237,8 @@ export function connect(opts: { resume?: boolean } = {}): void {
 		reconnectAttempts = 0;
 		armWatchdog();
 		// A reloaded / reconnected socket is unbound: the first message must
-		// be RECONNECT so the server rebinds the same seat (§8). The backend
-		// also accepts ?roomId&sessionToken query params, but an explicit
-		// RECONNECT message keeps the flow identical for fresh + resumed sockets.
+		// be RECONNECT so the server rebinds the same seat (§8), rehydrating
+		// the room from its snapshot if a restart dropped it from memory.
 		if (resumePending) {
 			resumePending = false;
 			const saved = loadSavedSession();
@@ -283,8 +298,8 @@ function scheduleReconnect() {
 
 export function send(type: string, payload: Record<string, unknown> = {}): void {
 	if (!socket || socket.readyState !== WebSocket.OPEN) {
-		// If we still hold a seat, keep the socket coming back so the 120s
-		// window is not wasted on a dead socket.
+	// If we still hold a seat, keep the socket coming back so a transient
+	// drop doesn't strand us offline.
 		if (hasSavedSession() && gameStore.connection === 'closed') connect({ resume: true });
 		gameStore.lastError = 'সংযোগ খোলা নেই। পুনরায় চেষ্টা করুন।';
 		return;
@@ -398,7 +413,7 @@ function handleMessage(raw: string) {
 					reconnectTimer = null;
 				}
 				gameStore.lastError =
-					'আপনার আগের আসনটি আর নেই (সময় শেষ বা সার্ভার রিস্টার্ট)। নিচে রুম কোড দিয়ে আবার যোগ দিন।';
+					'আপনার আগের আসনটি আর নেই (মেয়াদ শেষ)। নিচে রুম কোড দিয়ে আবার যোগ দিন।';
 			} else if (typeof payload['message'] === 'string') {
 				gameStore.lastError = payload['message'] as string;
 			}
