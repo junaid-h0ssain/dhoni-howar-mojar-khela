@@ -40,6 +40,9 @@ func (e *GameEngine) BuyProperty(playerID string, tileID int) (*Outcome, error) 
 	t.OwnerID = p.ID
 	o := &Outcome{Purchased: true, PurchasedTileID: tileID}
 	e.AppendLog(fmt.Sprintf("%s %s কিনেছেন ৳%d দিয়ে।", p.Name, t.NameBn, t.Price))
+	if e.allPropertiesSold() {
+		e.AppendLog("🎉 সব সম্পত্তি বিক্রি হয়ে গেছে! এখন বাড়ি ও হোটেল তৈরি করা যাবে।")
+	}
 	return o, nil
 }
 

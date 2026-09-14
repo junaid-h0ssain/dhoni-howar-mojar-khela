@@ -87,6 +87,28 @@
 			</p>
 			{#if tile.type === 'PROPERTY'}
 				<p class="mt-1 text-sm text-slate-600">অবস্থা: {levelLabel}</p>
+				<div class="mt-1.5 flex items-center gap-1.5">
+					{#each [1, 2, 3, 4] as i}
+						<span
+							class="inline-block h-3 w-3 rounded-full border {tile.houses >= 5
+								? 'border-slate-200 bg-slate-100'
+								: i <= tile.houses
+									? 'border-green-700 bg-green-600'
+									: 'border-slate-300 bg-slate-100'}"
+							title={i <= tile.houses ? `বাড়ি ${i}` : `খালি স্লট ${i}`}
+						></span>
+					{/each}
+					<span class="text-xs text-slate-400">→</span>
+					<span
+						class="inline-block h-3.5 w-3.5 rounded-full border {tile.houses >= 5
+							? 'border-red-700 bg-red-600'
+							: 'border-slate-300 bg-slate-100'}"
+						title="হোটেল (৪ বাড়ির পর)"
+					></span>
+					<span class="text-xs text-slate-500">
+						{tile.houses >= 5 ? 'হোটেল হয়ে গেছে' : tile.houses === 4 ? 'পরের ধাপ: হোটেল' : `${tile.houses}/৪ বাড়ি`}
+					</span>
+				</div>
 			{/if}
 			{#if occupants.length > 0}
 				<div class="mt-2 text-sm">

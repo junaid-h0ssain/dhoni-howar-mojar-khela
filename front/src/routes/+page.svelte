@@ -6,12 +6,15 @@
 	import PlayerList from '$lib/components/PlayerList.svelte';
 	import PropertyModal from '$lib/components/PropertyModal.svelte';
 	import PlayerModal from '$lib/components/PlayerModal.svelte';
+	import SoldOutModal from '$lib/components/SoldOutModal.svelte';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 	import { gameStore } from '$lib/stores/gameStore.svelte';
 	import { connect, hasSavedSession, leaveRoom, retryNow, getReconnectAttempts } from '$lib/utils/websocket';
 
 	let selectedTile: number | null = $state(null);
 	let selectedPlayer: string | null = $state(null);
+	let showSoldOut = $state(false);
+	let soldOutSeenFor: string | null = $state(null);
 
 	function handleLeave() {
 		selectedTile = null;
@@ -33,6 +36,35 @@
 
 	const inGame = $derived(!!gameStore.gameState || !!gameStore.roomCode);
 	const logs = $derived([...(gameStore.gameState?.logs ?? [])].reverse().slice(0, 12));
+	// Pop for EVERY player when the board sells out: derived from the
+	// authoritative GAME_STATE broadcast, so all clients see it together.
+	const allSold = $derived(
+		!!gameStore.gameState &&
+			gameStore.gameState.status === 'IN_GAME' &&
+			Object.values(gameStore.gameState.tiles ?? {}).every((t) =>
+				t.type === 'PROPERTY' || t.type === 'UTILITY' || t.type === 'RAILROAD'
+					? !!t.ownerId
+					: true
+			)
+	);
+	$effect(() => {
+		const room = gameStore.gameState?.roomId ?? null;
+		if (!room) return;
+		if (soldOutSeenFor !== room) {
+			soldOutSeenFor = null;
+			showSoldOut = false;
+		}
+		if (allSold && soldOutSeenFor !== room) {
+			showSoldOut = true;
+		}
+		if (!allSold) {
+			showSoldOut = false;
+		}
+	});
+	function dismissSoldOut() {
+		showSoldOut = false;
+		soldOutSeenFor = gameStore.gameState?.roomId ?? soldOutSeenFor;
+	}
 </script>
 
 <!-- Flat off-white backdrop -->
@@ -148,4 +180,5 @@
 
 	<PropertyModal tileId={selectedTile} onclose={() => (selectedTile = null)} />
 	<PlayerModal playerId={selectedPlayer} onclose={() => (selectedPlayer = null)} />
+	<SoldOutModal open={showSoldOut} onclose={dismissSoldOut} />
 </main>

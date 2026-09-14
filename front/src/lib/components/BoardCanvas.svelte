@@ -192,26 +192,33 @@
 				ctx.fillStyle = '#475569';
 				ctx.fillText(`৳${t.price}`, cx, cy + nameSize / 2 + 13);
 			}
-			// Houses 1–4: green pips; 5 (hotel): red block.
+			// Houses 1–4: green dots beside the property; 5 (hotel): one red dot.
+			// 4 houses upgrade into a single hotel (server rule).
 			if (t.houses > 0 && t.houses < 5) {
-				const s = 7;
-				const gap = 2;
-				const total = t.houses * s + (t.houses - 1) * gap;
-				let hx = cx - total / 2;
+				const s = 4.5;
+				const gap = 3;
+				const total = t.houses * (s * 2) + (t.houses - 1) * gap;
+				let hx = cx - total / 2 + s;
 				const hy = r.y + r.h - 12;
 				ctx.fillStyle = '#16a34a';
+				ctx.strokeStyle = '#ffffff';
+				ctx.lineWidth = 1.5;
 				for (let h = 0; h < t.houses; h++) {
-					ctx.fillRect(hx, hy, s, s);
-					hx += s + gap;
+					ctx.beginPath();
+					ctx.arc(hx, hy, s, 0, Math.PI * 2);
+					ctx.fill();
+					ctx.stroke();
+					hx += s * 2 + gap;
 				}
 			} else if (t.houses >= 5) {
-				const hw = 22;
-				const hy = r.y + r.h - 13;
+				const hy = r.y + r.h - 12;
 				ctx.fillStyle = '#dc2626';
-				ctx.fillRect(cx - hw / 2, hy, hw, 9);
-				ctx.strokeStyle = '#fbbf24';
+				ctx.strokeStyle = '#ffffff';
 				ctx.lineWidth = 1.5;
-				ctx.strokeRect(cx - hw / 2, hy, hw, 9);
+				ctx.beginPath();
+				ctx.arc(cx, hy, 6.5, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.stroke();
 			}
 		}
 
