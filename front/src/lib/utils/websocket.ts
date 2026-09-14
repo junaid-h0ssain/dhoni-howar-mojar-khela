@@ -16,7 +16,7 @@ const NAME_KEY = 'mahajoni.playerName';
 
 // Production endpoint. Overridden by PUBLIC_WS_URL at build/dev time;
 // local hostnames fall back to a local backend automatically.
-const PROD_WS_URL = 'wss://dhmk.onrender.com/ws';
+const PROD_WS_URL = 'https://dhmk.onrender.com/ws';
 
 // Watchdog: server pings ~54s (pingPeriod); if no frame arrives within
 // WATCHDOG_MS the socket is half-open (common after phone sleep) — force a
