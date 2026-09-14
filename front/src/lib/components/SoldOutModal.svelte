@@ -29,8 +29,9 @@
 			<p class="text-5xl">🎉</p>
 			<h3 class="mt-2 text-xl font-bold text-emerald-900">সব সম্পত্তি বিক্রি হয়ে গেছে!</h3>
 			<p class="mt-1 text-sm text-slate-600">
-				এখন পুরো গ্রুপের মালিকরা বাড়ি তুলতে পারবেন — <b>৪টি 🏠 সবুজ ডট</b> হলে পরের ধাপে
-				<b class="text-red-600">১টি 🔴 হোটেল ডটে</b> আপগ্রেড হবে।
+				এখন নিজের যেকোনো জমিতে বাড়ি তুলতে পারবেন — <b>৪টি 🏠 সবুজ ডট</b> হলে পরের ধাপে
+				<b class="text-red-600">১টি 🔴 হোটেল ডটে</b> আপগ্রেড হবে। পুরো গ্রুপ একা দখলে থাকলে
+				খালি জমির ভাড়া <b>দ্বিগুণ</b> পাবেন!
 			</p>
 			<div class="mt-3 flex items-center justify-center gap-2 text-sm">
 				<span class="flex items-center gap-1">

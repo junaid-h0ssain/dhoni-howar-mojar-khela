@@ -49,8 +49,10 @@ func (e *GameEngine) BuyProperty(playerID string, tileID int) (*Outcome, error) 
 // BuildHouse adds a house (0-3→+1) or hotel (4→5) on a player-owned tile.
 // Houses 1-4 build up one level at a time, then the 5th level is a hotel
 // (the max). Building unlocks only after every purchasable tile on the
-// board is sold. Requires a complete color group, even building across
-// the group, and cash.
+// board is sold. No full color group is required — any owned PROPERTY tile
+// can be developed; holding the full group instead doubles the unimproved
+// base rent (see calculateRent). Even building applies across the tiles of
+// the group the player owns, and cash is required.
 func (e *GameEngine) BuildHouse(playerID string, tileID int) (*Outcome, error) {
 	p, err := e.requireTurn(playerID, models.PhaseAction)
 	if err != nil {
@@ -69,13 +71,11 @@ func (e *GameEngine) BuildHouse(playerID string, tileID int) (*Outcome, error) {
 	if !e.allPropertiesSold() {
 		return nil, errEngine("BOARD_NOT_SOLD_OUT", "সব সম্পত্তি বিক্রি হওয়ার আগে বাড়ি/হোটেল তৈরি করা যাবে না।")
 	}
-	if !e.ownsFullGroup(p.ID, t.Group) {
-		return nil, errEngine("NO_FULL_GROUP", "পুরো গ্রুপের মালিক না হলে বাড়ি তৈরি করা যায় না।")
-	}
 	if t.Houses >= 5 {
 		return nil, errEngine("MAX_LEVEL", "এখানে ইতিমধ্যে হোটেল আছে।")
 	}
-	// Even-building: build on the least-developed tile(s) of the group first.
+	// Even-building: build on the least-developed owned tile(s) of the
+	// group first.
 	min := 5
 	for _, u := range e.State.Tiles {
 		if u.Type == models.TileProperty && u.Group == t.Group && u.OwnerID == p.ID {

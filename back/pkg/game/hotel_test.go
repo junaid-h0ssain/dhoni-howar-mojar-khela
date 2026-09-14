@@ -167,3 +167,52 @@ func TestHotelUpgradeSequence(t *testing.T) {
 		t.Fatalf("hotel rent %d != tiers[5] %d", got, tl.RentTiers[5])
 	}
 }
+
+// A lone tile with no group-mates owned still upgrades to a hotel:
+// only ownership + sell-out + cash matter.
+func TestSingleTileHotelWithoutGroup(t *testing.T) {
+	e, host, guest := newStartedEngine(24)
+	unlockBuying(e)
+	e.State.TurnPhase = models.PhaseAction
+
+	ownAllExcept(e, guest.ID, 11) // guest holds everything but tile 11
+	e.State.Tiles[11].OwnerID = host.ID
+	host.Cash = 100000
+
+	for level := 1; level <= 5; level++ {
+		o, err := e.BuildHouse(host.ID, 11)
+		if err != nil {
+			t.Fatalf("build %d on lone tile: %v", level, err)
+		}
+		if o.BuiltLevel != level {
+			t.Fatalf("expected level %d, got %+v", level, o)
+		}
+	}
+	if e.State.Tiles[11].Houses != 5 {
+		t.Fatalf("expected hotel (5), got %d", e.State.Tiles[11].Houses)
+	}
+}
+
+// Full group keeps its rent perk: unimproved base rent doubles, while a
+// lone tile pays base. (Building no longer requires the group.)
+func TestFullGroupDoubleRentBenefit(t *testing.T) {
+	e, host, guest := newStartedEngine(25)
+	unlockBuying(e)
+
+	// Lone tile: host holds only 11 of the pink group.
+	ownAllExcept(e, guest.ID, 11)
+	e.State.Tiles[11].OwnerID = host.ID
+	lone := e.calculateRent(e.State.Tiles[11], host.ID, 7)
+	if lone != e.State.Tiles[11].RentTiers[0] {
+		t.Fatalf("lone tile rent %d != base %d", lone, e.State.Tiles[11].RentTiers[0])
+	}
+
+	// Full group: host completes pink.
+	for _, id := range []int{11, 13, 14} {
+		e.State.Tiles[id].OwnerID = host.ID
+	}
+	full := e.calculateRent(e.State.Tiles[11], host.ID, 7)
+	if full != e.State.Tiles[11].RentTiers[0]*2 {
+		t.Fatalf("full-group rent %d != double base %d", full, e.State.Tiles[11].RentTiers[0]*2)
+	}
+}
