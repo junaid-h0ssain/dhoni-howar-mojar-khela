@@ -192,31 +192,65 @@
 				ctx.fillStyle = '#475569';
 				ctx.fillText(`৳${t.price}`, cx, cy + nameSize / 2 + 13);
 			}
-			// Houses 1–4: green dots beside the property; 5 (hotel): one red dot.
-			// 4 houses upgrade into a single hotel (server rule).
-			if (t.houses > 0 && t.houses < 5) {
+		}
+
+		// Houses/hotels: dots OUTSIDE the tile on the board-center side, so
+		// tile text stays readable. 1–4 green dots = houses, 1 red dot = hotel.
+		for (let id = 0; id < 40; id++) {
+			const t = tiles[id];
+			if (!t || t.houses <= 0) continue;
+			const r = tileRect(id);
+			const cx = r.x + r.w / 2;
+			const cy = r.y + r.h / 2;
+			const OFF = 10;
+			// Anchor + axis: bottom row → above tile, top row → below tile,
+			// left column → right of tile, right column → left of tile.
+			let ax = cx;
+			let ay = cy;
+			let horizontal = true;
+			if (id >= 1 && id <= 9) {
+				ax = cx;
+				ay = r.y - OFF;
+				horizontal = true;
+			} else if (id >= 11 && id <= 19) {
+				ax = r.x + r.w + OFF;
+				ay = cy;
+				horizontal = false;
+			} else if (id >= 21 && id <= 29) {
+				ax = cx;
+				ay = r.y + r.h + OFF;
+				horizontal = true;
+			} else if (id >= 31 && id <= 39) {
+				ax = r.x - OFF;
+				ay = cy;
+				horizontal = false;
+			} else {
+				// Corners never hold houses, but keep a sane inward fallback.
+				ax = cx + (cx < BOARD_SIZE / 2 ? OFF : -OFF);
+				ay = cy + (cy < BOARD_SIZE / 2 ? OFF : -OFF);
+			}
+			if (t.houses < 5) {
 				const s = 4.5;
 				const gap = 3;
 				const total = t.houses * (s * 2) + (t.houses - 1) * gap;
-				let hx = cx - total / 2 + s;
-				const hy = r.y + r.h - 12;
+				let d = -total / 2 + s;
 				ctx.fillStyle = '#16a34a';
 				ctx.strokeStyle = '#ffffff';
 				ctx.lineWidth = 1.5;
 				for (let h = 0; h < t.houses; h++) {
 					ctx.beginPath();
-					ctx.arc(hx, hy, s, 0, Math.PI * 2);
+					if (horizontal) ctx.arc(ax + d, ay, s, 0, Math.PI * 2);
+					else ctx.arc(ax, ay + d, s, 0, Math.PI * 2);
 					ctx.fill();
 					ctx.stroke();
-					hx += s * 2 + gap;
+					d += s * 2 + gap;
 				}
-			} else if (t.houses >= 5) {
-				const hy = r.y + r.h - 12;
+			} else {
 				ctx.fillStyle = '#dc2626';
 				ctx.strokeStyle = '#ffffff';
 				ctx.lineWidth = 1.5;
 				ctx.beginPath();
-				ctx.arc(cx, hy, 6.5, 0, Math.PI * 2);
+				ctx.arc(ax, ay, 6.5, 0, Math.PI * 2);
 				ctx.fill();
 				ctx.stroke();
 			}
