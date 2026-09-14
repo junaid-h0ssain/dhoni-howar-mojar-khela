@@ -199,7 +199,7 @@
 				</p>
 			{:else if myBuildable.length === 0}
 				<p class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
-					তৈরি করার মতো সম্পত্তি নেই (পুরো গ্রুপ + খালি জায়গা থাকতে হবে)।
+					নিজের কোনো জমিতে জায়গা খালি নেই — সবগুলোতে হোটেল হয়ে গেছে!
 				</p>
 			{:else}
 				<div class="rounded-xl border border-purple-300 bg-purple-50 p-2">

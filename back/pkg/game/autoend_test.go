@@ -169,13 +169,37 @@ func TestAutoEndHoldsBuildableAfterSellout(t *testing.T) {
 	}
 }
 
-// After sell-out with no full group, there is nothing to build: turn passes.
-func TestAutoEndNoGroupAfterSellout(t *testing.T) {
+// After sell-out, a single owned tile (no full group) is still buildable:
+// the turn holds so the player can build.
+func TestAutoEndHoldsPartialGroupAfterSellout(t *testing.T) {
 	e, host, guest := newStartedEngine(106)
 	sellOutBoard(e, guest.ID)
-	e.State.Tiles[11].OwnerID = host.ID // single pink, no group
+	e.State.Tiles[11].OwnerID = host.ID // single pink, buildable without group
 	host.Cash = 5000
-	host.Position = 8 // +3 -> tile 11 (own, unbuildable)
+	host.Position = 8 // +3 -> tile 11 (own, buildable)
+	e.SetFixedDice([][2]int{{1, 2}})
+	o, err := rollAndAutoEnd(e, host.ID)
+	if err != nil {
+		t.Fatalf("roll: %v", err)
+	}
+	if o.TurnAdvanced || e.State.CurrentTurnPlayerID != host.ID {
+		t.Fatalf("partial-group landing must hold the turn: %+v", o)
+	}
+	if e.State.TurnPhase != models.PhaseAction {
+		t.Fatalf("expected ACTION phase, got %s", e.State.TurnPhase)
+	}
+	if _, err := e.BuildHouse(host.ID, 11); err != nil {
+		t.Fatalf("build must succeed in the held window: %v", err)
+	}
+}
+
+// After sell-out with no owned property at all, there is nothing to build:
+// the turn passes (rent is paid automatically).
+func TestAutoEndNoPropertyAfterSellout(t *testing.T) {
+	e, host, guest := newStartedEngine(108)
+	sellOutBoard(e, guest.ID)
+	host.Cash = 5000
+	host.Position = 8 // +3 -> tile 11 (guest's pink, rent payable)
 	e.SetFixedDice([][2]int{{1, 2}})
 	o, err := rollAndAutoEnd(e, host.ID)
 	if err != nil {

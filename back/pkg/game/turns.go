@@ -128,28 +128,16 @@ func (e *GameEngine) AutoEndIfNoAction(playerID string, o *Outcome) {
 }
 
 // canBuildAnywhere reports whether the player has a legal house/hotel build
-// available right now: the board is sold out, they hold a full group with
-// headroom below hotel, and they can afford the next level.
+// available right now: the board is sold out and they own a PROPERTY tile
+// with headroom below hotel that they can afford. No full group needed.
 func (e *GameEngine) canBuildAnywhere(p *models.Player) bool {
 	if !e.allPropertiesSold() {
 		return false
 	}
-	groups := map[string]bool{}
 	for _, t := range e.State.Tiles {
-		if t.Type != models.TileProperty || t.OwnerID != p.ID || t.Houses >= 5 {
-			continue
-		}
-		groups[t.Group] = true
-	}
-	for g := range groups {
-		if !e.ownsFullGroup(p.ID, g) {
-			continue
-		}
-		for _, t := range e.State.Tiles {
-			if t.Type == models.TileProperty && t.Group == g && t.OwnerID == p.ID &&
-				t.Houses < 5 && p.Cash >= t.HouseCost {
-				return true
-			}
+		if t.Type == models.TileProperty && t.OwnerID == p.ID &&
+			t.Houses < 5 && p.Cash >= t.HouseCost {
+			return true
 		}
 	}
 	return false

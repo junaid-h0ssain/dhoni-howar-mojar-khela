@@ -22,6 +22,8 @@ export interface Tile {
 	/** [Base, 1H, 2H, 3H, 4H, Hotel] */
 	rentTiers?: number[];
 	houseCost?: number;
+	/** Display-only mortgage value (no mortgage feature exists). */
+	mortgage?: number;
 	group?: string;
 	ownerId?: string;
 	/** 0–4 = houses, 5 = hotel */

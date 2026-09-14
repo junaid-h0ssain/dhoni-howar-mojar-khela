@@ -25,6 +25,8 @@ type Tile struct {
 	Price      int      `json:"price,omitempty"`
 	RentTiers  []int    `json:"rentTiers,omitempty"` // [Base, 1H, 2H, 3H, 4H, Hotel]
 	HouseCost  int      `json:"houseCost,omitempty"`
+	// Mortgage is display-only info (no mortgage feature exists).
+	Mortgage   int      `json:"mortgage,omitempty"`
 	Group      string   `json:"group,omitempty"`
 	OwnerID    string   `json:"ownerId,omitempty"`
 	Houses     int      `json:"houses"` // 0-4 houses, 5 = hotel

@@ -401,7 +401,8 @@ func TestBuildHouseRules(t *testing.T) {
 		mustErrCode(t, err, "BOARD_NOT_SOLD_OUT")
 	}
 	// Sell out the board but keep the pink group split: host holds 11,
-	// guest holds 13/14 -> still no full group.
+	// guest holds 13/14. No full group is needed — any owned tile builds
+	// (full groups only boost unimproved base rent ×2).
 	for id, tl := range e.State.Tiles {
 		switch tl.Type {
 		case models.TileProperty, models.TileUtility, models.TileRailroad:
@@ -416,12 +417,14 @@ func TestBuildHouseRules(t *testing.T) {
 	}
 	e.State.Tiles[13].OwnerID = guest.ID
 	e.State.Tiles[14].OwnerID = guest.ID
-	// Partial group -> refuse.
-	if _, err := e.BuildHouse(host.ID, 11); err == nil {
-		t.Fatal("expected NO_FULL_GROUP")
-	} else {
-		mustErrCode(t, err, "NO_FULL_GROUP")
+	if _, err := e.BuildHouse(host.ID, 11); err != nil {
+		t.Fatalf("partial-group build must succeed: %v", err)
 	}
+	if e.State.Tiles[11].Houses != 1 {
+		t.Fatalf("expected 1 house, got %d", e.State.Tiles[11].Houses)
+	}
+	// Reset for the even-building checks below.
+	e.State.Tiles[11].Houses = 0
 	// Complete pink group.
 	for _, id := range []int{11, 13, 14} {
 		e.State.Tiles[id].OwnerID = host.ID
