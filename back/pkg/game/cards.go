@@ -6,9 +6,8 @@ import (
 	"backend/pkg/models"
 )
 
-// Card effects: cash delta, teleport, jail, or step back.
-// (No holdable "get out of jail" cards — effects resolve immediately,
-// keeping the state model identical to the frontend types.)
+// Card effects: cash delta, teleport, jail, step back, or a holdable
+// get-out-of-jail card kept in the player's inventory until used.
 type cardKind int
 
 const (
@@ -16,6 +15,7 @@ const (
 	cardMoveTo
 	cardGoToJail
 	cardMoveBack
+	cardGetOutOfJail
 )
 
 type card struct {
@@ -38,6 +38,7 @@ var chanceCards = []card{
 	{text: "চট্টগ্রাম বন্দরে যান।", kind: cardMoveTo, amount: 15},
 	{text: "ভ্রমণ ভাতা পেলেন: +৳75", kind: cardCash, amount: 75},
 	{text: "জরুরি মেরামত খরচ: -৳75", kind: cardCash, amount: -75},
+	{text: "জেল থেকে মুক্তির কার্ড পেলেন! জেলে গেলে ব্যবহার করুন।", kind: cardGetOutOfJail},
 }
 
 // Community Chest — সুযোগ গ্রহণ.
@@ -54,6 +55,7 @@ var chestCards = []card{
 	{text: "চিকিৎসা খরচ -৳100।", kind: cardCash, amount: -100},
 	{text: "চট্টগ্রাম জংশনে যান।", kind: cardMoveTo, amount: 25},
 	{text: "স্থানীয় কর ফেরত +৳80।", kind: cardCash, amount: 80},
+	{text: "জেল থেকে মুক্তির কার্ড পেলেন! জেলে গেলে ব্যবহার করুন।", kind: cardGetOutOfJail},
 }
 
 func (e *GameEngine) drawChance(p *models.Player, diceTotal, depth int, o *Outcome) {
@@ -93,6 +95,10 @@ func (e *GameEngine) applyCard(p *models.Player, c card, deck string, diceTotal,
 		}
 	case cardGoToJail:
 		e.sendToJail(p, o, "কার্ড তুলে")
+	case cardGetOutOfJail:
+		p.JailCards++
+		e.State.TurnPhase = models.PhaseAction
+		e.AppendLog(fmt.Sprintf("%s-এর কাছে মুক্তির কার্ড %dটি।", p.Name, p.JailCards))
 	case cardMoveTo:
 		from := p.Position
 		p.Position = c.amount % 40

@@ -40,6 +40,8 @@ type Player struct {
 	Position    int    `json:"position"` // 0-39
 	InJail      bool   `json:"inJail"`
 	JailTurns   int    `json:"jailTurns"`
+	// JailCards counts holdable get-out-of-jail cards (chance/chest).
+	JailCards   int    `json:"jailCards"`
 	IsBankrupt  bool   `json:"isBankrupt"`
 	IsConnected bool   `json:"isConnected"`
 	// LapsCompleted counts full board circuits (passing GO) via dice
@@ -108,4 +110,6 @@ const (
 	ActBuyProperty = "BUY_PROPERTY"
 	ActBuildHouse  = "BUILD_HOUSE"
 	ActEndTurn     = "END_TURN"
+	ActPayJailFine = "PAY_JAIL_FINE"
+	ActUseJailCard = "USE_JAIL_CARD"
 )
