@@ -117,7 +117,10 @@ func (e *GameEngine) AutoEndIfNoAction(playerID string, o *Outcome) {
 	p := e.FindPlayer(playerID)
 	// While the player hasn't completed their first lap there is never
 	// anything to decide after a roll, so the turn passes on its own.
-	if p == nil || (p.LapsCompleted >= 1 && e.canBuyLandedTile(p)) {
+	// A pending purchase OR a pending house/hotel build both hold the turn
+	// in ACTION — the latter only unlocks after sell-out, so early pace is
+	// untouched while builders always get their window.
+	if p == nil || ((p.LapsCompleted >= 1 && e.canBuyLandedTile(p)) || e.canBuildAnywhere(p)) {
 		return
 	}
 	e.AppendLog(fmt.Sprintf("%s-এর আর কোনো কাজ নেই — দান শেষ হয়েছে।", p.Name))
@@ -125,11 +128,38 @@ func (e *GameEngine) AutoEndIfNoAction(playerID string, o *Outcome) {
 	o.TurnAdvanced = true
 }
 
+// canBuildAnywhere reports whether the player has a legal house/hotel build
+// available right now: the board is sold out, they hold a full group with
+// headroom below hotel, and they can afford the next level.
+func (e *GameEngine) canBuildAnywhere(p *models.Player) bool {
+	if !e.allPropertiesSold() {
+		return false
+	}
+	groups := map[string]bool{}
+	for _, t := range e.State.Tiles {
+		if t.Type != models.TileProperty || t.OwnerID != p.ID || t.Houses >= 5 {
+			continue
+		}
+		groups[t.Group] = true
+	}
+	for g := range groups {
+		if !e.ownsFullGroup(p.ID, g) {
+			continue
+		}
+		for _, t := range e.State.Tiles {
+			if t.Type == models.TileProperty && t.Group == g && t.OwnerID == p.ID &&
+				t.Houses < 5 && p.Cash >= t.HouseCost {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // canBuyLandedTile reports whether the player can buy the tile they stand on.
-// Only the landed tile blocks auto-advance: build options elsewhere must not
-// hold the turn, because they exist on nearly every late-game turn and would
-// stall every landing in ACTION awaiting a manual End Turn. Building stays
-// available through the explicit BUILD_HOUSE action.
+// Only the landed tile blocks auto-advance for buying; build options are
+// handled separately by canBuildAnywhere (post-sellout only), so early-game
+// landings never stall in ACTION awaiting a manual End Turn.
 func (e *GameEngine) canBuyLandedTile(p *models.Player) bool {
 	t := e.State.Tiles[p.Position]
 	if t == nil || t.OwnerID != "" || p.Cash < t.Price {
@@ -143,7 +173,7 @@ func (e *GameEngine) canBuyLandedTile(p *models.Player) bool {
 }
 
 // rollInJail handles ROLL_DICE while imprisoned: doubles escape free,
-// otherwise the stay counter grows; on the 3rd failed attempt the ৳50 fine
+// otherwise the stay counter grows; on the 3rd failed attempt the JailFine
 // is auto-paid and the player moves.
 func (e *GameEngine) rollInJail(p *models.Player, d1, d2 int, o *Outcome) {
 	if d1 == d2 {

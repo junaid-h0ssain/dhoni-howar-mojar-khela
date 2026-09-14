@@ -128,3 +128,72 @@ func TestAutoEndHoldsBuyableIdleTile(t *testing.T) {
 	e.AutoEndIfNoAction(host.ID, bo)
 	expectAdvanced(t, e, bo, guest.ID)
 }
+
+// sellOutBoard assigns every purchasable tile, unlocking house building.
+func sellOutBoard(e *GameEngine, ownerID string) {
+	for _, t := range e.State.Tiles {
+		switch t.Type {
+		case models.TileProperty, models.TileUtility, models.TileRailroad:
+			t.OwnerID = ownerID
+		}
+	}
+}
+
+// After sell-out, landing on an idle tile must HOLD the turn when the player
+// has a real build available — otherwise the build UI is unreachable and the
+// game stalls with money but nothing to spend it on.
+func TestAutoEndHoldsBuildableAfterSellout(t *testing.T) {
+	e, host, guest := newStartedEngine(105)
+	sellOutBoard(e, guest.ID)
+	giveHostLateGame(e, host, 5000) // full pink + cash
+	host.Position = 8               // +3 -> tile 11 (own pink)
+	e.SetFixedDice([][2]int{{1, 2}})
+	o, err := rollAndAutoEnd(e, host.ID)
+	if err != nil {
+		t.Fatalf("roll: %v", err)
+	}
+	if o.TurnAdvanced || e.State.CurrentTurnPlayerID != host.ID {
+		t.Fatalf("buildable landing must hold the turn: %+v", o)
+	}
+	if e.State.TurnPhase != models.PhaseAction {
+		t.Fatalf("expected ACTION phase, got %s", e.State.TurnPhase)
+	}
+	if _, err := e.BuildHouse(host.ID, 11); err != nil {
+		t.Fatalf("build must succeed in the held window: %v", err)
+	}
+	if _, err := e.EndTurn(host.ID); err != nil {
+		t.Fatalf("endturn: %v", err)
+	}
+	if e.State.CurrentTurnPlayerID != guest.ID {
+		t.Fatalf("turn should pass after manual end, got %s", e.State.CurrentTurnPlayerID)
+	}
+}
+
+// After sell-out with no full group, there is nothing to build: turn passes.
+func TestAutoEndNoGroupAfterSellout(t *testing.T) {
+	e, host, guest := newStartedEngine(106)
+	sellOutBoard(e, guest.ID)
+	e.State.Tiles[11].OwnerID = host.ID // single pink, no group
+	host.Cash = 5000
+	host.Position = 8 // +3 -> tile 11 (own, unbuildable)
+	e.SetFixedDice([][2]int{{1, 2}})
+	o, err := rollAndAutoEnd(e, host.ID)
+	if err != nil {
+		t.Fatalf("roll: %v", err)
+	}
+	expectAdvanced(t, e, o, guest.ID)
+}
+
+// After sell-out with a full group but no cash, holding the turn is pointless.
+func TestAutoEndBrokeAfterSellout(t *testing.T) {
+	e, host, guest := newStartedEngine(107)
+	sellOutBoard(e, guest.ID)
+	giveHostLateGame(e, host, 10) // full pink, can't afford 100 house
+	host.Position = 8             // +3 -> tile 11 (own pink)
+	e.SetFixedDice([][2]int{{1, 2}})
+	o, err := rollAndAutoEnd(e, host.ID)
+	if err != nil {
+		t.Fatalf("roll: %v", err)
+	}
+	expectAdvanced(t, e, o, guest.ID)
+}
