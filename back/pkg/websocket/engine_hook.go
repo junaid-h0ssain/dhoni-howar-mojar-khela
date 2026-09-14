@@ -142,6 +142,16 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 		_, err := r.Engine.EndTurn(c.playerID)
 		r.finishEngineCall(c, msg, err)
 		return true
+
+	case models.ActPayJailFine:
+		_, err := r.Engine.PayJailFine(c.playerID)
+		r.finishEngineCall(c, msg, err)
+		return true
+
+	case models.ActUseJailCard:
+		_, err := r.Engine.UseJailCard(c.playerID)
+		r.finishEngineCall(c, msg, err)
+		return true
 	}
 	return false
 }

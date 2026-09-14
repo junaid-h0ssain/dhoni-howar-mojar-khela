@@ -3,6 +3,8 @@
 	import CashDisplay from '$lib/components/CashDisplay.svelte';
 	import { tileIcon } from '$lib/utils/tileIcons';
 
+	let { onselect }: { onselect?: (id: string) => void } = $props();
+
 	/** Property + house counts per player, derived from authoritative tiles. */
 	function holdings(playerId: string): { props: number; houses: number } {
 		let props = 0;
@@ -39,11 +41,16 @@
 				{@const h = holdings(p.id)}
 				{@const isTurn = p.id === gameStore.gameState.currentTurnPlayerId}
 				<li
-					class="flex flex-wrap items-center gap-2 rounded-xl border px-2.5 py-1.5 text-sm transition {isTurn
+					class="rounded-xl border px-2.5 py-1.5 text-sm transition {isTurn
 						? 'anim-turn-pulse border-amber-600/50 bg-amber-100'
 						: 'border-slate-200 bg-slate-50'} {p.isBankrupt ? 'opacity-50 saturate-50' : ''}"
 					title="সম্পত্তি: {h.props}, বাড়ি/হোটেল: {h.houses}"
 				>
+					<button
+						class="flex w-full cursor-pointer flex-wrap items-center gap-2 rounded-lg text-left hover:bg-emerald-50/50"
+						title="বিস্তারিত দেখতে ক্লিক করুন"
+						onclick={() => onselect?.(p.id)}
+					>
 					<span
 						class="inline-block h-3 w-3 {tokenShapes[i % tokenShapes.length]}"
 						style:background-color={p.tokenColor}
@@ -56,6 +63,14 @@
 							● চাল
 						</span>
 					{/if}
+					{#if p.inJail}
+						<span class="rounded-full bg-slate-700 px-1.5 text-xs text-white">🔒 জেলে</span>
+					{/if}
+					{#if (p.jailCards ?? 0) > 0}
+						<span class="rounded-full bg-purple-100 px-1.5 text-xs text-purple-800" title="জেল থেকে মুক্তির কার্ড">
+							🃏×{p.jailCards}
+						</span>
+					{/if}
 					{#if !p.isConnected}
 						<span class="rounded-full bg-slate-200 px-1.5 text-xs text-slate-500">অফলাইন</span>
 					{/if}
@@ -65,6 +80,7 @@
 					<span class="w-full text-xs text-slate-500" title="বর্তমান অবস্থান">
 						📍 {locationOf(p.position)}
 					</span>
+					</button>
 				</li>
 			{/each}
 		</ul>

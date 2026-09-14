@@ -3,10 +3,14 @@
 	import { send } from '$lib/utils/websocket';
 	import { diceFace } from '$lib/utils/dice';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
+	import UnsoldModal from '$lib/components/UnsoldModal.svelte';
+
+	let { onselecttile }: { onselecttile?: (id: number) => void } = $props();
 
 	let buildTileId = $state<number | null>(null);
 	let adminD1 = $state(6);
 	let adminD2 = $state(6);
+	let showUnsold = $state(false);
 
 	const tilesList = $derived(
 		Object.values(gameStore.gameState?.tiles ?? {}).sort((a, b) => a.id - b.id)
@@ -63,6 +67,24 @@
 			{diceFace(shownDice[0])}{diceFace(shownDice[1])}
 			<span class="ml-1 align-middle text-sm text-slate-500">= {shownDice[0] + shownDice[1]}</span>
 		</p>
+		{#if allSold}
+			<p class="mb-2 rounded-xl border border-emerald-600/20 bg-emerald-50 px-3 py-1.5 text-center text-xs font-medium text-emerald-900">
+				✅ সব সম্পত্তি বিক্রি — বাড়ি তৈরি করা যাবে!
+			</p>
+		{:else}
+			<button
+				class="mb-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-center text-xs text-slate-600 transition hover:border-emerald-600/50 hover:bg-emerald-50/50 active:scale-[0.99]"
+				title="কোন সম্পত্তিগুলো এখনও অবিক্রীত — দেখতে ট্যাপ করুন"
+				onclick={() => (showUnsold = true)}
+			>
+				🏘️ অবিক্রীত <b class="text-slate-900">{unsoldCount}টি</b> — তালিকা দেখুন
+			</button>
+		{/if}
+		<UnsoldModal
+			open={showUnsold}
+			onclose={() => (showUnsold = false)}
+			onselect={(id) => onselecttile?.(id)}
+		/>
 	{/if}
 	{#if !gameStore.gameState}
 		<p class="text-sm text-slate-500">ঘরে যোগ দিন।</p>
@@ -92,14 +114,37 @@
 			<p class="text-sm text-slate-600">মহাজনি চ্যাম্পিয়ন! 🎉</p>
 		</div>
 	{:else if gameStore.canRoll}
-		<ClickSpark sparkColor="#059669" sparkCount={12} sparkRadius={30}>
-			<button
-				class="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-lg font-bold text-white transition hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
-				onclick={() => rollDice()}
-			>
-				🎲 দান চালুন!
-			</button>
-		</ClickSpark>
+		{#if gameStore.me?.inJail}
+			{@const cards = gameStore.me?.jailCards ?? 0}
+			<div class="rounded-xl border border-slate-300 bg-slate-50 p-2">
+				<p class="mb-2 text-center text-sm font-semibold text-slate-700">
+					🔒 জেলে আছেন ({(gameStore.me?.jailTurns ?? 0) + 1}/3) — জোড়া ফেলুন, জরিমানা
+					দিন, বা কার্ড ব্যবহার করুন।
+				</p>
+				<div class="flex flex-col gap-2">
+					<button
+						class="w-full rounded-xl bg-amber-600 px-4 py-2.5 font-bold text-white transition hover:bg-amber-500 active:scale-95"
+						onclick={() => send('PAY_JAIL_FINE', {})}
+					>
+						🔓 ৳100 জরিমানা দিয়ে বের হোন
+					</button>
+					<button
+						class="w-full rounded-xl bg-purple-600 px-4 py-2.5 font-bold text-white transition hover:bg-purple-500 active:scale-95 disabled:opacity-50"
+						disabled={cards <= 0}
+						onclick={() => send('USE_JAIL_CARD', {})}
+					>
+						🃏 মুক্তির কার্ড ব্যবহার করুন ({cards}টি)
+					</button>
+				</div>
+				<p class="mt-2 text-center text-xs text-slate-500">
+					অথবা বোর্ডের মাঝখানে 🎲 চাপুন — জোড়া পড়লে ফ্রি মুক্তি!
+				</p>
+			</div>
+		{:else if !gameStore.isAdmin}
+			<p class="anim-glow-drift rounded-xl border border-emerald-600/20 bg-emerald-50 px-3 py-2.5 text-center text-sm font-medium text-emerald-900">
+				বোর্ডের মাঝখানে 🎲 চাপুন!
+			</p>
+		{/if}
 		{#if gameStore.isAdmin}
 			<div class="mt-2 rounded-xl border border-red-300 bg-red-50 p-2">
 				<p class="mb-1 text-xs font-semibold text-red-700">🔧 Admin: পাশা নিয়ন্ত্রণ</p>

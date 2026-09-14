@@ -38,6 +38,8 @@ export interface Player {
 	position: number;
 	inJail: boolean;
 	jailTurns: number;
+	/** Holdable get-out-of-jail cards. Absent on older servers — treat as 0. */
+	jailCards?: number;
 	isBankrupt: boolean;
 	isConnected: boolean;
 	// Full board circuits (passing GO). Buying unlocks after the first lap.
@@ -71,7 +73,9 @@ export const ClientActions = {
 	ROLL_DICE: 'ROLL_DICE',
 	BUY_PROPERTY: 'BUY_PROPERTY',
 	BUILD_HOUSE: 'BUILD_HOUSE',
-	END_TURN: 'END_TURN'
+	END_TURN: 'END_TURN',
+	PAY_JAIL_FINE: 'PAY_JAIL_FINE',
+	USE_JAIL_CARD: 'USE_JAIL_CARD'
 } as const;
 
 /** Server → client event types (§10). */

@@ -13,7 +13,7 @@ import (
 const (
 	StartCash    = 1500
 	GoSalary     = 200
-	JailFine     = 50
+	JailFine     = 100
 	MaxJailTurns = 3
 )
 
