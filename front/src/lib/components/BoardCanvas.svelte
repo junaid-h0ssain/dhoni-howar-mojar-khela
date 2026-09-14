@@ -1,17 +1,83 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { gameStore } from '$lib/stores/gameStore.svelte';
 	import { TILE_MAP } from '$lib/constants/tiles';
 	import { GROUP_COLORS } from '$lib/constants/boardData';
 	import { BOARD_SIZE, tileRect } from '$lib/utils/canvasRenderer';
 	import { tileIcon } from '$lib/utils/tileIcons';
 	import { diceFace } from '$lib/utils/dice';
+	import { send } from '$lib/utils/websocket';
 
 	let { onselect }: { onselect?: (id: number) => void } = $props();
 
 	let canvas: HTMLCanvasElement;
 
 	const FONT_FAMILY = '"Hind Siliguri", sans-serif';
+
+	// ——— Token hop animation ———
+	// When a token changes tiles it hops forward tile-by-tile (one bounce per
+	// tile) instead of teleporting. Positions animate toward the authoritative
+	// state; a fresh update mid-hop retargets from the current tile.
+	const STEP_MS = 160;
+	const HOP_PX = 18;
+	interface Hop {
+		from: number;
+		to: number;
+		start: number;
+	}
+	let shownPos = $state<Record<string, number>>({});
+	let hops = $state<Record<string, Hop>>({});
+	let raf = 0;
+	const reducedMotion =
+		typeof window !== 'undefined' &&
+		window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+	function tileCenter(id: number): { x: number; y: number } {
+		const r = tileRect(((id % 40) + 40) % 40);
+		return { x: r.x + r.w / 2, y: r.y + r.h / 2 + 8 };
+	}
+
+	/** Tile the hop has reached at `now` (whole steps only). */
+	function hopTile(h: Hop, now: number): number {
+		const steps = (h.to - h.from + 40) % 40;
+		const f = Math.min(Math.max((now - h.start) / STEP_MS, 0), steps);
+		return (h.from + Math.floor(f)) % 40;
+	}
+
+	/** Interpolated pixel position with a parabolic bounce per tile. */
+	function hopXY(h: Hop, now: number): { x: number; y: number } {
+		const steps = (h.to - h.from + 40) % 40;
+		const f = Math.min(Math.max((now - h.start) / STEP_MS, 0), steps);
+		const prev = (h.from + Math.floor(f)) % 40;
+		const t = f - Math.floor(f);
+		const a = tileCenter(prev);
+		const b = tileCenter((prev + 1) % 40);
+		return {
+			x: a.x + (b.x - a.x) * t,
+			y: a.y + (b.y - a.y) * t - Math.sin(Math.PI * t) * HOP_PX
+		};
+	}
+
+	function tickHopLoop() {
+		if (raf) return;
+		const tick = () => {
+			const now = performance.now();
+			for (const [id, h] of Object.entries(hops)) {
+				if (now - h.start >= ((h.to - h.from + 40) % 40) * STEP_MS) {
+					shownPos[id] = h.to;
+					delete hops[id];
+				}
+			}
+			draw(now);
+			raf = Object.keys(hops).length > 0 ? requestAnimationFrame(tick) : 0;
+		};
+		raf = requestAnimationFrame(tick);
+	}
+
+	onDestroy(() => {
+		if (raf) cancelAnimationFrame(raf);
+		raf = 0;
+	});
 
 	/** Largest font size (down from base) that fits text into maxWidth. */
 	function fitFont(
@@ -73,7 +139,7 @@
 		ctx.stroke();
 	}
 
-	function draw() {
+	function draw(now: number = performance.now()) {
 		const ctx = canvas?.getContext('2d');
 		if (!ctx || !canvas) return;
 		const dpr = window.devicePixelRatio || 1;
@@ -152,13 +218,17 @@
 		// Player tokens, grouped per tile so shared tiles lay out in a grid
 		// instead of overlapping. Tokens are drawn large (r=13) to stay
 		// visible on mobile, shrinking only when a tile gets crowded.
+		// A hopping token is drawn at its flight position (on top) instead.
 		const players = gameStore.gameState?.players ?? [];
+		const hopping = new Set(Object.keys(hops));
 		const byTile = new Map<number, number[]>();
 		players.forEach((p, i) => {
-			if (!tiles[p.position]) return;
-			const list = byTile.get(p.position) ?? [];
+			if (hopping.has(p.id)) return; // drawn at flight position below
+			const tile = shownPos[p.id] ?? p.position;
+			if (!tiles[tile]) return;
+			const list = byTile.get(tile) ?? [];
 			list.push(i);
-			byTile.set(p.position, list);
+			byTile.set(tile, list);
 		});
 		byTile.forEach((indices, pos) => {
 			const r = tileRect(pos);
@@ -182,6 +252,15 @@
 				ctx.lineWidth = 3;
 				drawToken(ctx, tokenShape(pi), cx + ox, cy + oy, size);
 			});
+		});
+		// Hopping tokens fly above the grid, one bounce per tile.
+		players.forEach((p, i) => {
+			if (!hopping.has(p.id)) return;
+			const { x, y } = hopXY(hops[p.id], now);
+			ctx.fillStyle = p.tokenColor;
+			ctx.strokeStyle = '#fff';
+			ctx.lineWidth = 3;
+			drawToken(ctx, tokenShape(i), x, y, 13);
 		});
 
 		// Center artwork + whose turn it is.
@@ -241,9 +320,35 @@
 	});
 
 	$effect(() => {
-		// Re-draw whenever authoritative state changes.
-		void gameStore.gameState;
-		if (canvas) draw();
+		// Track authoritative positions: new seats snap, movers hop.
+		// A fresh update mid-hop retargets from the tile already reached.
+		const ps = gameStore.gameState?.players ?? [];
+		const now = performance.now();
+		for (const p of ps) {
+			if (shownPos[p.id] === undefined) {
+				shownPos[p.id] = p.position;
+				continue;
+			}
+			const from = hops[p.id] ? hopTile(hops[p.id], now) : shownPos[p.id];
+			if (from === p.position) {
+				if (!hops[p.id]) shownPos[p.id] = p.position;
+				continue;
+			}
+			if (reducedMotion) {
+				delete hops[p.id];
+				shownPos[p.id] = p.position;
+				continue;
+			}
+			hops[p.id] = { from, to: p.position, start: now };
+			tickHopLoop();
+		}
+		for (const id of Object.keys(shownPos)) {
+			if (!ps.some((p) => p.id === id)) {
+				delete shownPos[id];
+				delete hops[id];
+			}
+		}
+		if (canvas) draw(now);
 	});
 
 	function handleClick(ev: MouseEvent) {
@@ -261,9 +366,21 @@
 	}
 </script>
 
-<canvas
-	bind:this={canvas}
-	style="width: 100%; max-width: 800px; aspect-ratio: 1;"
-	class="mx-auto cursor-pointer rounded-2xl shadow-lg"
-	onclick={handleClick}
-></canvas>
+<div class="relative mx-auto" style="max-width: 800px;">
+	<canvas
+		bind:this={canvas}
+		style="width: 100%; aspect-ratio: 1;"
+		class="cursor-pointer rounded-2xl shadow-lg"
+		onclick={handleClick}
+	></canvas>
+	{#if gameStore.canRoll}
+		<div class="pointer-events-none absolute inset-0">
+			<button
+				class="anim-turn-pulse pointer-events-auto absolute left-1/2 top-[68%] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-emerald-600 px-8 py-4 text-2xl font-bold text-white shadow-xl transition hover:bg-emerald-500 active:scale-95"
+				onclick={() => send('ROLL_DICE', {})}
+			>
+				{gameStore.me?.inJail ? '🎲 জোড়ার চেষ্টা!' : '🎲 দান চালুন!'}
+			</button>
+		</div>
+	{/if}
+</div>
