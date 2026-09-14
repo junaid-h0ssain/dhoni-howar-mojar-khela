@@ -89,22 +89,12 @@ type Message struct {
 	SessionToken string         `json:"sessionToken,omitempty"`
 }
 
-// ServerEvent types sent from server to clients.
+// ServerEvent types sent from server to clients. Clients render purely from
+// GAME_STATE — no granular animation events exist by design.
 const (
-	EvRoomCreated        = "ROOM_CREATED"
-	EvPlayerJoined       = "PLAYER_JOINED"
-	EvPlayerLeft         = "PLAYER_LEFT"
-	EvGameStarted        = "GAME_STARTED"
-	EvGameState          = "GAME_STATE"
-	EvDiceRolled         = "DICE_ROLLED"
-	EvPlayerMoved        = "PLAYER_MOVED"
-	EvPropertyPurchased  = "PROPERTY_PURCHASED"
-	EvHouseBuilt         = "HOUSE_BUILT"
-	EvPlayerBankrupt     = "PLAYER_BANKRUPT"
-	EvPlayerDisconnected = "PLAYER_DISCONNECTED"
-	EvPlayerReconnected  = "PLAYER_RECONNECTED"
-	EvGameFinished       = "GAME_FINISHED"
-	EvError              = "ERROR"
+	EvRoomCreated = "ROOM_CREATED"
+	EvGameState   = "GAME_STATE"
+	EvError       = "ERROR"
 )
 
 // ClientAction types accepted from clients.
@@ -118,5 +108,4 @@ const (
 	ActBuyProperty = "BUY_PROPERTY"
 	ActBuildHouse  = "BUILD_HOUSE"
 	ActEndTurn     = "END_TURN"
-	ActSendPing    = "PING"
 )

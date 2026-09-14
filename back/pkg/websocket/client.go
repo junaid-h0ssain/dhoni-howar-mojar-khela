@@ -38,8 +38,9 @@ type Client struct {
 }
 
 // ServeWS upgrades HTTP to WebSocket and routes CREATE/JOIN to the hub,
-// then binds the socket to its room. Query params: ?roomId=..&sessionToken=..
-// for reconnection; otherwise the first message must be CREATE_ROOM/JOIN_ROOM.
+// then binds the socket to its room. The first message must be
+// CREATE_ROOM / JOIN_ROOM / RECONNECT; JOIN and RECONNECT rehydrate the room
+// from its persisted snapshot when a restart dropped it from memory.
 func ServeWS(hub *Hub, allowedOrigins map[string]bool, w http.ResponseWriter, r *http.Request) {
 	if len(allowedOrigins) > 0 {
 		origin := r.Header.Get("Origin")
@@ -53,22 +54,6 @@ func ServeWS(hub *Hub, allowedOrigins map[string]bool, w http.ResponseWriter, r 
 		return
 	}
 	c := &Client{hub: hub, conn: conn, send: make(chan []byte, 64)}
-
-	// Fast-path: reconnect via query params before entering the read loop.
-	if roomID := r.URL.Query().Get("roomId"); roomID != "" {
-		if token := r.URL.Query().Get("sessionToken"); token != "" {
-			if room, ok := hub.GetRoom(roomID); ok {
-				c.room = room
-				room.Submit(c, models.Message{
-					Type:         models.ActReconnect,
-					SessionToken: token,
-				})
-				go c.writePump()
-				go c.readPump()
-				return
-			}
-		}
-	}
 
 	go c.writePump()
 	go c.readPump()
@@ -141,7 +126,7 @@ func (c *Client) bindToRoom(msg models.Message) bool {
 		return true
 
 	case models.ActJoinRoom:
-		room, ok := c.hub.GetRoom(str("roomId"))
+		room, ok := c.hub.GetOrLoadRoom(str("roomId"))
 		if !ok {
 			c.sendError("ROOM_NOT_FOUND", "ঘর পাওয়া যায়নি।", msg.RequestID)
 			return false
@@ -152,7 +137,7 @@ func (c *Client) bindToRoom(msg models.Message) bool {
 		return true
 
 	case models.ActReconnect:
-		room, ok := c.hub.GetRoom(str("roomId"))
+		room, ok := c.hub.GetOrLoadRoom(str("roomId"))
 		if !ok {
 			c.sendError("ROOM_NOT_FOUND", "ঘর পাওয়া যায়নি।", msg.RequestID)
 			return false

@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"context"
 	"errors"
 	"time"
 
@@ -22,7 +21,6 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 				r.Engine.State.CurrentTurnPlayerID == playerID
 			p.IsConnected = false
 			r.Engine.AppendLog(p.Name + " সংযোগ বিচ্ছিন্ন হয়েছেন।")
-			r.emit(models.EvPlayerDisconnected, map[string]any{"playerId": playerID})
 			// The offline player cannot roll, so never leave the dice with
 			// them: hand the turn to the next online player right away.
 			if wasCurrent {
@@ -55,13 +53,12 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 	case "__reconnect_timeout__":
 		playerID, _ := msg.Payload["playerId"].(string)
 		if p := r.Engine.FindPlayer(playerID); p != nil && !p.IsConnected {
-			if token, _ := msg.Payload["sessionToken"].(string); token != "" {
-				_ = r.hub.sessions.Delete(context.Background(), token)
-			}
+			// Gameplay grace expired: forfeit a stuck turn, but keep the
+			// player object AND the seat token (24h) so a late returner
+			// still reclaims their seat from the persisted game.
 			if r.Engine.ForfeitTurn(playerID) {
 				r.Engine.AppendLog(p.Name + " সময়মতো ফিরে না আসায় চাল বাতিল হয়েছে।")
 			}
-			r.emit(models.EvPlayerLeft, map[string]any{"playerId": playerID})
 			r.emitState()
 		}
 		return true
@@ -112,7 +109,7 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 		if err == nil {
 			r.Engine.AutoEndIfNoAction(c.playerID, o)
 		}
-		r.finishEngineCall(c, msg, o, err)
+		r.finishEngineCall(c, msg, err)
 		return true
 
 	case models.ActBuyProperty:
@@ -125,7 +122,7 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 		if err == nil {
 			r.Engine.AutoEndIfNoAction(c.playerID, o)
 		}
-		r.finishEngineCall(c, msg, o, err)
+		r.finishEngineCall(c, msg, err)
 		return true
 
 	case models.ActBuildHouse:
@@ -138,20 +135,21 @@ func (r *Room) tryEngineAction(c *Client, msg models.Message) bool {
 		if err == nil {
 			r.Engine.AutoEndIfNoAction(c.playerID, o)
 		}
-		r.finishEngineCall(c, msg, o, err)
+		r.finishEngineCall(c, msg, err)
 		return true
 
 	case models.ActEndTurn:
-		o, err := r.Engine.EndTurn(c.playerID)
-		r.finishEngineCall(c, msg, o, err)
+		_, err := r.Engine.EndTurn(c.playerID)
+		r.finishEngineCall(c, msg, err)
 		return true
 	}
 	return false
 }
 
-// finishEngineCall maps engine errors to ERROR events and successful outcomes
-// to granular events, then always broadcasts the authoritative GAME_STATE.
-func (r *Room) finishEngineCall(c *Client, msg models.Message, o *game.Outcome, err error) {
+// finishEngineCall maps engine errors to ERROR events, then always
+// broadcasts (and persists) the authoritative GAME_STATE. Clients render
+// purely from GAME_STATE — no granular animation events.
+func (r *Room) finishEngineCall(c *Client, msg models.Message, err error) {
 	if err != nil {
 		var ee *game.EngineError
 		if errors.As(err, &ee) {
@@ -160,33 +158,6 @@ func (r *Room) finishEngineCall(c *Client, msg models.Message, o *game.Outcome, 
 			c.sendError("ACTION_FAILED", "চাল দেওয়া যায়নি।", msg.RequestID)
 		}
 		return
-	}
-	me := c.playerID
-	if o.Rolled {
-		r.emit(models.EvDiceRolled, map[string]any{
-			"playerId": me, "dice": []int{o.Dice[0], o.Dice[1]}, "doubles": o.Doubles,
-		})
-	}
-	if o.Moved {
-		r.emit(models.EvPlayerMoved, map[string]any{
-			"playerId": me, "from": o.MovedFrom, "to": o.MovedTo, "passedGo": o.PassedGo,
-		})
-	}
-	if o.Purchased {
-		r.emit(models.EvPropertyPurchased, map[string]any{
-			"playerId": me, "tileId": o.PurchasedTileID,
-		})
-	}
-	if o.Built {
-		r.emit(models.EvHouseBuilt, map[string]any{
-			"playerId": me, "tileId": o.BuiltTileID, "houses": o.BuiltLevel,
-		})
-	}
-	for _, pid := range o.Bankrupted {
-		r.emit(models.EvPlayerBankrupt, map[string]any{"playerId": pid})
-	}
-	if o.Finished {
-		r.emit(models.EvGameFinished, map[string]any{"winnerId": o.WinnerID})
 	}
 	r.emitState()
 }

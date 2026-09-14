@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"sync"
 	"time"
 
@@ -122,12 +123,17 @@ func (r *Room) emit(eventType string, payload map[string]any) {
 	}
 }
 
-// emitState broadcasts the full authoritative state.
+// emitState broadcasts the full authoritative state and persists a snapshot
+// so the game survives backend restarts (24h TTL). Clients render purely
+// from GAME_STATE — no granular animation events are emitted.
 func (r *Room) emitState() {
 	stateBytes, _ := json.Marshal(r.Engine.State)
 	var payload map[string]any
 	_ = json.Unmarshal(stateBytes, &payload)
 	r.emit(models.EvGameState, payload)
+	if err := r.hub.sessions.SaveGame(ctxBG(), r.ID, stateBytes, store.GameTTL); err != nil {
+		log.Printf("room %s: snapshot save failed: %v", r.ID, err)
+	}
 }
 
 func (r *Room) sendTo(c *Client, eventType string, payload map[string]any) {
@@ -179,7 +185,7 @@ func (r *Room) handleAction(c *Client, msg models.Message) {
 		}
 		token := uuid.NewString()
 		_ = r.hub.sessions.Save(ctxBG(), token,
-			store.Session{RoomID: r.ID, PlayerID: playerID}, store.ReconnectTTL)
+			store.Session{RoomID: r.ID, PlayerID: playerID}, store.SessionTTL)
 		c.playerID = playerID
 		c.sessionToken = token
 		r.attachClient(c)
@@ -191,7 +197,6 @@ func (r *Room) handleAction(c *Client, msg models.Message) {
 		r.sendTo(c, models.EvRoomCreated, map[string]any{
 			"roomId": r.ID, "playerId": playerID, "sessionToken": token,
 		})
-		r.emit(models.EvPlayerJoined, map[string]any{"playerId": playerID, "playerName": playerName})
 		r.emitState()
 
 	case models.ActReconnect:
@@ -217,12 +222,11 @@ func (r *Room) handleAction(c *Client, msg models.Message) {
 		c.playerID = p.ID
 		c.sessionToken = token
 		// Sliding window: an active-but-flaky phone that manages to reconnect
-		// gets a fresh 120s TTL so it doesn't expire mid-game.
+		// gets a fresh 24h TTL so its seat survives the game lifetime.
 		_ = r.hub.sessions.Save(ctxBG(), token,
-			store.Session{RoomID: r.ID, PlayerID: sess.PlayerID}, store.ReconnectTTL)
+			store.Session{RoomID: r.ID, PlayerID: sess.PlayerID}, store.SessionTTL)
 		r.attachClient(c)
 		r.Engine.AppendLog(p.Name + " পুনরায় সংযুক্ত হয়েছেন।")
-		r.emit(models.EvPlayerReconnected, map[string]any{"playerId": p.ID})
 		r.emitState()
 
 	case models.ActLeaveRoom:
@@ -232,7 +236,7 @@ func (r *Room) handleAction(c *Client, msg models.Message) {
 			return
 		}
 		oldHost := r.Engine.State.HostID
-		removed, _, finished, winnerID := r.Engine.RemovePlayer(pid)
+		removed, _, _, _ := r.Engine.RemovePlayer(pid)
 		if removed == nil {
 			c.sendError("PLAYER_NOT_FOUND", "খেলোয়াড় পাওয়া যায়নি।", msg.RequestID)
 			return
@@ -252,10 +256,6 @@ func (r *Room) handleAction(c *Client, msg models.Message) {
 				r.Engine.AppendLog(heir.Name + " এখন হোস্ট।")
 			}
 		}
-		r.emit(models.EvPlayerLeft, map[string]any{"playerId": removed.ID})
-		if finished {
-			r.emit(models.EvGameFinished, map[string]any{"winnerId": winnerID})
-		}
 		r.emitState()
 
 	case models.ActStartGame:
@@ -272,11 +272,7 @@ func (r *Room) handleAction(c *Client, msg models.Message) {
 			}
 			return
 		}
-		r.emit(models.EvGameStarted, map[string]any{"roomId": r.ID})
 		r.emitState()
-
-	case models.ActSendPing:
-		r.sendTo(c, "PONG", map[string]any{})
 
 	default:
 		// Full Monopoly actions (ROLL_DICE, BUY_PROPERTY, …) land in Task 3.

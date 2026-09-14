@@ -63,9 +63,13 @@ func TestReconnectTimeoutNilClient(t *testing.T) {
 	if e.State.CurrentTurnPlayerID != guest.ID {
 		t.Fatalf("turn should forfeit to guest, got %s", e.State.CurrentTurnPlayerID)
 	}
-	// The expired session must be cleaned up.
-	if _, found, _ := r.hub.sessions.Lookup(context.Background(), token); found {
-		t.Fatal("expired host session should have been deleted")
+	// The seat token must SURVIVE the gameplay timeout (24h session): the
+	// player object stays in the game so a late returner reclaims their seat.
+	if _, found, _ := r.hub.sessions.Lookup(context.Background(), token); !found {
+		t.Fatal("host session should be retained for late reclaim")
+	}
+	if e.FindPlayer(host.ID) == nil {
+		t.Fatal("host player object should stay in the game for late reclaim")
 	}
 }
 

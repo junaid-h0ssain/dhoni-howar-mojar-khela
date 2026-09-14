@@ -17,7 +17,7 @@ import (
 
 func main() {
 	cfg := config.Load()
-	sessions := store.NewSessionStore(cfg.RedisURL, cfg.RedisPassword)
+	sessions := store.NewStore(cfg.RedisURL, cfg.RedisPassword)
 	defer func() { _ = sessions.Close() }()
 
 	hub := ws.NewHub(sessions)
