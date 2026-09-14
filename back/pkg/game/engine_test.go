@@ -662,9 +662,11 @@ func TestForfeitTurn(t *testing.T) {
 
 // TestFullGameSimulation plays seeded 2-player games to completion asserting
 // global invariants after every action. Seeds are chosen for decisive games
-// (seed 7 stabilizes into a rich equilibrium past any sane step budget).
+// (rich-cash decks can stabilize some seeds, e.g. 5/12/24, into a no-trade
+// equilibrium past any sane step budget — the classic stall, also excluding
+// old seed 7 before the UK decks).
 func TestFullGameSimulation(t *testing.T) {
-	for _, seed := range []int64{42, 5, 99} {
+	for _, seed := range []int64{42, 19, 99} {
 		st := NewGame("SIM", "")
 		e := NewEngineWithSeed(st, seed)
 		var ids []string
