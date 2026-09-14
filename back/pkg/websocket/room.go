@@ -216,6 +216,10 @@ func (r *Room) handleAction(c *Client, msg models.Message) {
 		p.IsConnected = true
 		c.playerID = p.ID
 		c.sessionToken = token
+		// Sliding window: an active-but-flaky phone that manages to reconnect
+		// gets a fresh 120s TTL so it doesn't expire mid-game.
+		_ = r.hub.sessions.Save(ctxBG(), token,
+			store.Session{RoomID: r.ID, PlayerID: sess.PlayerID}, store.ReconnectTTL)
 		r.attachClient(c)
 		r.Engine.AppendLog(p.Name + " পুনরায় সংযুক্ত হয়েছেন।")
 		r.emit(models.EvPlayerReconnected, map[string]any{"playerId": p.ID})

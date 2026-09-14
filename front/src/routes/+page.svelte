@@ -7,7 +7,7 @@
 	import PropertyModal from '$lib/components/PropertyModal.svelte';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 	import { gameStore } from '$lib/stores/gameStore.svelte';
-	import { connect, hasSavedSession, leaveRoom } from '$lib/utils/websocket';
+	import { connect, hasSavedSession, leaveRoom, retryNow, getReconnectAttempts } from '$lib/utils/websocket';
 
 	let selectedTile: number | null = $state(null);
 
@@ -72,11 +72,22 @@
 				</span>
 			</div>
 			{#if gameStore.connection !== 'open' && gameStore.gameState}
-				<p
-					class="w-full rounded-xl border border-amber-600/30 bg-amber-100 px-3 py-2 text-center text-xs text-amber-900"
+				<div
+					class="flex w-full flex-wrap items-center justify-center gap-2 rounded-xl border border-amber-600/30 bg-amber-100 px-3 py-2 text-center text-xs text-amber-900"
 				>
-					পুনরায় সংযোগ হচ্ছে… আপনার টাকা, জমি ও চাল সংরক্ষিত আছে।
-				</p>
+					<span>
+						পুনরায় সংযোগ হচ্ছে… আপনার টাকা, জমি ও চাল সংরক্ষিত আছে।
+						{#if getReconnectAttempts() > 0}
+							(চেষ্টা {getReconnectAttempts()})
+						{/if}
+					</span>
+					<button
+						class="rounded-lg bg-amber-400 px-2.5 py-1 font-bold text-amber-950 transition hover:bg-amber-300 active:scale-95"
+						onclick={() => retryNow()}
+					>
+						এখনই আবার চেষ্টা করুন
+					</button>
+				</div>
 			{/if}
 		</header>
 

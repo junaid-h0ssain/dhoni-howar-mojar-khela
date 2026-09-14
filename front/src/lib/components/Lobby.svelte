@@ -8,6 +8,7 @@
 		send,
 		hasSavedSession,
 		loadSavedSession,
+		loadLastRoomId,
 		reconnectSaved,
 		clearSavedSession,
 		savePlayerName,
@@ -21,6 +22,12 @@
 	onMount(() => {
 		saved = loadSavedSession();
 		if (saved?.playerName) playerName = saved.playerName;
+		// Seat expired but we remember the room: prefill for a quick rejoin.
+		if (!roomCode) {
+			const last = loadLastRoomId();
+			if (last) roomCode = last;
+		}
+		if (saved) roomCode = saved.roomId;
 	});
 
 	function refreshSaved() {

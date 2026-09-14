@@ -15,11 +15,21 @@ const NAME_KEY = 'mahajoni.playerName';
 
 const WS_URL = 'wss://dhmk.onrender.com/ws';
 
+// Watchdog: server pings ~54s (pingPeriod); if no frame arrives within
+// WATCHDOG_MS the socket is half-open (common after phone sleep) — force a
+// close so onclose → retry fires instead of hanging on a dead socket.
+const WATCHDOG_MS = 75000;
+// Remember the last room even after the seat expires, so the lobby can
+// prefill it for a quick rejoin instead of a blank form.
+const LAST_ROOM_KEY = 'mahajoni.lastRoomId';
+
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
 let manualClose = false;
 let resumePending = false;
+let netListenersAttached = false;
 
 function getWsUrl(): string {
 	return WS_URL;
@@ -79,6 +89,80 @@ function persistSession(roomId: string, playerId: string, token: string) {
 	lsSet(ROOM_KEY, roomId);
 	lsSet(PLAYER_KEY, playerId);
 	lsSet(SESSION_KEY, token);
+	lsSet(LAST_ROOM_KEY, roomId);
+}
+
+export function loadLastRoomId(): string | null {
+	return lsGet(LAST_ROOM_KEY);
+}
+
+export function getReconnectAttempts(): number {
+	return reconnectAttempts;
+}
+
+/** Force an immediate resume attempt (retry button / foreground / online). */
+export function retryNow(): void {
+	if (!hasSavedSession()) return;
+	connect({ resume: true });
+}
+
+/** Last message timestamp → watchdog helpers. */
+function armWatchdog() {
+	if (typeof window === 'undefined') return;
+	if (watchdogTimer) clearTimeout(watchdogTimer);
+	watchdogTimer = setTimeout(() => {
+		// No frame for WATCHDOG_MS: treat a seemingly-open socket as dead.
+		if (socket && socket.readyState === WebSocket.OPEN) {
+			try {
+				socket.close();
+			} catch {
+				/* onclose schedules the retry */
+			}
+		} else if (!socket || socket.readyState === WebSocket.CLOSED) {
+			connect({ resume: true });
+		}
+	}, WATCHDOG_MS);
+}
+
+function clearWatchdog() {
+	if (watchdogTimer) {
+		clearTimeout(watchdogTimer);
+		watchdogTimer = null;
+	}
+}
+
+/**
+ * Foreground / network resume (phone app-switch fix): mobile browsers freeze
+ * setTimeout while backgrounded, so the backoff loop may never fire. Listen
+ * once and resume immediately when the page is visible again or the network
+ * comes back.
+ */
+function ensureNetListeners() {
+	if (typeof window === 'undefined' || typeof document === 'undefined') return;
+	if (netListenersAttached) return;
+	netListenersAttached = true;
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState !== 'visible') return;
+		if (!hasSavedSession()) return;
+		if (socket && socket.readyState === WebSocket.OPEN) {
+			armWatchdog();
+			return;
+		}
+		connect({ resume: true });
+	});
+	window.addEventListener('online', () => {
+		if (hasSavedSession()) connect({ resume: true });
+	});
+	window.addEventListener('offline', () => {
+		gameStore.connection = 'closed';
+	});
+	window.addEventListener('pageshow', (ev) => {
+		// bfcache restores (mobile back-button) don't rerun onMount.
+		const persisted = (ev as PageTransitionEvent).persisted;
+		if (!persisted) return;
+		if (!hasSavedSession()) return;
+		if (!socket || socket.readyState !== WebSocket.OPEN) connect({ resume: true });
+	});
 }
 
 function saveSessionToken(token: string) {
@@ -107,8 +191,24 @@ export function restoreSavedSessionToStore(): SavedSession | null {
 }
 
 export function connect(opts: { resume?: boolean } = {}): void {
-	disconnect();
+	// Tear down any previous socket without tripping the manual-close guard,
+	// and drop a stale retry so foreground/online events can't stack sockets.
+	if (reconnectTimer) {
+		clearTimeout(reconnectTimer);
+		reconnectTimer = null;
+	}
+	clearWatchdog();
+	manualClose = true;
+	if (socket) {
+		try {
+			socket.close();
+		} catch {
+			/* ignore */
+		}
+		socket = null;
+	}
 	manualClose = false;
+	ensureNetListeners();
 	resumePending = opts.resume !== false && hasSavedSession();
 	// Pre-fill the store so the UI can show "reconnecting…" instead of lobby.
 	if (resumePending) restoreSavedSessionToStore();
@@ -117,7 +217,9 @@ export function connect(opts: { resume?: boolean } = {}): void {
 	socket = new WebSocket(target);
 	socket.onopen = () => {
 		gameStore.connection = 'open';
+		gameStore.lastError = null;
 		reconnectAttempts = 0;
+		armWatchdog();
 		// A reloaded / reconnected socket is unbound: the first message must
 		// be RECONNECT so the server rebinds the same seat (§8). The backend
 		// also accepts ?roomId&sessionToken query params, but an explicit
@@ -140,10 +242,14 @@ export function connect(opts: { resume?: boolean } = {}): void {
 			}
 		}
 	};
-	socket.onmessage = (ev) => handleMessage(ev.data);
+	socket.onmessage = (ev) => {
+		armWatchdog();
+		handleMessage(ev.data);
+	};
 	socket.onclose = () => {
 		gameStore.connection = 'closed';
 		socket = null;
+		clearWatchdog();
 		scheduleReconnect();
 	};
 	socket.onerror = () => {
@@ -211,6 +317,7 @@ export function leaveRoom(): void {
 
 export function disconnect(): void {
 	manualClose = true;
+	clearWatchdog();
 	if (reconnectTimer) {
 		clearTimeout(reconnectTimer);
 		reconnectTimer = null;
@@ -269,6 +376,7 @@ function handleMessage(raw: string) {
 			if (gameStore.gameState?.roomId) {
 				gameStore.roomCode = gameStore.gameState.roomId;
 				lsSet(ROOM_KEY, gameStore.gameState.roomId);
+				lsSet(LAST_ROOM_KEY, gameStore.gameState.roomId);
 			}
 			// After a reload the store starts empty: re-attach our identity
 			// from storage so isMyTurn / me / isHost resolve against the
@@ -284,10 +392,10 @@ function handleMessage(raw: string) {
 		}
 		case 'ERROR': {
 			const code = payload['code'];
-			if (typeof payload['message'] === 'string')
-				gameStore.lastError = payload['message'] as string;
 			// The seat is gone server-side: drop the stale token so the next
 			// attempt joins fresh instead of looping on a dead session.
+			// Surface a friendly message (the server strings are terse) and
+			// keep the last room code so the lobby can prefill a quick rejoin.
 			if (
 				code === 'SESSION_EXPIRED' ||
 				code === 'INVALID_SESSION' ||
@@ -299,6 +407,10 @@ function handleMessage(raw: string) {
 					clearTimeout(reconnectTimer);
 					reconnectTimer = null;
 				}
+				gameStore.lastError =
+					'আপনার আগের আসনটি আর নেই (সময় শেষ বা সার্ভার রিস্টার্ট)। নিচে রুম কোড দিয়ে আবার যোগ দিন।';
+			} else if (typeof payload['message'] === 'string') {
+				gameStore.lastError = payload['message'] as string;
 			}
 			break;
 		}
