@@ -5,14 +5,17 @@
 	import ActionPanel from '$lib/components/ActionPanel.svelte';
 	import PlayerList from '$lib/components/PlayerList.svelte';
 	import PropertyModal from '$lib/components/PropertyModal.svelte';
+	import PlayerModal from '$lib/components/PlayerModal.svelte';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 	import { gameStore } from '$lib/stores/gameStore.svelte';
 	import { connect, hasSavedSession, leaveRoom, retryNow, getReconnectAttempts } from '$lib/utils/websocket';
 
 	let selectedTile: number | null = $state(null);
+	let selectedPlayer: string | null = $state(null);
 
 	function handleLeave() {
 		selectedTile = null;
+		selectedPlayer = null;
 		leaveRoom();
 	}
 
@@ -108,7 +111,7 @@
 					<ActionPanel />
 				</section>
 				<section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-					<PlayerList />
+					<PlayerList onselect={(id) => (selectedPlayer = id)} />
 				</section>
 			</div>
 			{#if gameStore.gameState}
@@ -144,4 +147,5 @@
 	{/if}
 
 	<PropertyModal tileId={selectedTile} onclose={() => (selectedTile = null)} />
+	<PlayerModal playerId={selectedPlayer} onclose={() => (selectedPlayer = null)} />
 </main>
