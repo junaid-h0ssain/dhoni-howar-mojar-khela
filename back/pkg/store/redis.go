@@ -23,8 +23,32 @@ type SessionStore interface {
 	Close() error
 }
 
-// ReconnectTTL is the 120-second reconnection window from the spec.
+// GameStore persists full game snapshots so rooms survive backend restarts.
+// Implementations must expire entries after ttl.
+type GameStore interface {
+	SaveGame(ctx context.Context, roomID string, data []byte, ttl time.Duration) error
+	LoadGame(ctx context.Context, roomID string) (data []byte, found bool, err error)
+	GameExists(ctx context.Context, roomID string) (bool, error)
+	DeleteGame(ctx context.Context, roomID string) error
+}
+
+// Store is the combined persistence backend: seat sessions + game snapshots.
+type Store interface {
+	SessionStore
+	GameStore
+}
+
+// ReconnectTTL is the 120-second gameplay grace window from the spec: after a
+// disconnect the turn is forfeited and the seat marked offline, but the token
+// and snapshot below live much longer so late returners reclaim their seat.
 const ReconnectTTL = 120 * time.Second
+
+// SessionTTL is how long a seat token stays valid (matches the game snapshot
+// lifetime so a player returning hours later still rejoins as themselves).
+const SessionTTL = 24 * time.Hour
+
+// GameTTL is how long an abandoned game snapshot survives without activity.
+const GameTTL = 24 * time.Hour
 
 // --- Redis implementation ---
 
@@ -72,6 +96,32 @@ func (r *RedisStore) Delete(ctx context.Context, token string) error {
 	return r.client.Del(ctx, r.key(token)).Err()
 }
 
+func (r *RedisStore) gameKey(roomID string) string { return "game:" + roomID }
+
+func (r *RedisStore) SaveGame(ctx context.Context, roomID string, data []byte, ttl time.Duration) error {
+	return r.client.Set(ctx, r.gameKey(roomID), data, ttl).Err()
+}
+
+func (r *RedisStore) LoadGame(ctx context.Context, roomID string) ([]byte, bool, error) {
+	data, err := r.client.Get(ctx, r.gameKey(roomID)).Bytes()
+	if err == redis.Nil {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return data, true, nil
+}
+
+func (r *RedisStore) GameExists(ctx context.Context, roomID string) (bool, error) {
+	n, err := r.client.Exists(ctx, r.gameKey(roomID)).Result()
+	return n > 0, err
+}
+
+func (r *RedisStore) DeleteGame(ctx context.Context, roomID string) error {
+	return r.client.Del(ctx, r.gameKey(roomID)).Err()
+}
+
 func (r *RedisStore) Close() error { return r.client.Close() }
 
 // --- In-memory fallback (local dev without Redis) ---
@@ -81,14 +131,20 @@ type memEntry struct {
 	expiresAt time.Time
 }
 
-// MemoryStore is a TTL-expiring in-memory SessionStore.
+type memGameEntry struct {
+	data      []byte
+	expiresAt time.Time
+}
+
+// MemoryStore is a TTL-expiring in-memory Store.
 type MemoryStore struct {
-	mu   sync.Mutex
-	data map[string]memEntry
+	mu    sync.Mutex
+	data  map[string]memEntry
+	games map[string]memGameEntry
 }
 
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{data: make(map[string]memEntry)}
+	return &MemoryStore{data: make(map[string]memEntry), games: make(map[string]memGameEntry)}
 }
 
 func (m *MemoryStore) Save(_ context.Context, token string, s Session, ttl time.Duration) error {
@@ -119,11 +175,59 @@ func (m *MemoryStore) Delete(_ context.Context, token string) error {
 	return nil
 }
 
+func (m *MemoryStore) SaveGame(_ context.Context, roomID string, data []byte, ttl time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	m.games[roomID] = memGameEntry{data: cp, expiresAt: time.Now().Add(ttl)}
+	return nil
+}
+
+func (m *MemoryStore) LoadGame(_ context.Context, roomID string) ([]byte, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.games[roomID]
+	if !ok {
+		return nil, false, nil
+	}
+	if time.Now().After(e.expiresAt) {
+		delete(m.games, roomID)
+		return nil, false, nil
+	}
+	cp := make([]byte, len(e.data))
+	copy(cp, e.data)
+	return cp, true, nil
+}
+
+func (m *MemoryStore) GameExists(_ context.Context, roomID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.games[roomID]
+	if !ok {
+		return false, nil
+	}
+	if time.Now().After(e.expiresAt) {
+		delete(m.games, roomID)
+		return false, nil
+	}
+	return true, nil
+}
+
+func (m *MemoryStore) DeleteGame(_ context.Context, roomID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.games, roomID)
+	return nil
+}
+
 func (m *MemoryStore) Close() error { return nil }
 
-// NewSessionStore returns a Redis store when REDIS_URL is set,
+// NewStore returns a Redis store when REDIS_URL is set,
 // otherwise an in-memory store so `go run` works with zero config.
-func NewSessionStore(redisURL, password string) SessionStore {
+// Either way games persist across reloads within this process; only Redis
+// survives a restart or deploy.
+func NewStore(redisURL, password string) Store {
 	if redisURL != "" {
 		if rs, err := NewRedisStore(redisURL, password); err == nil {
 			return rs
