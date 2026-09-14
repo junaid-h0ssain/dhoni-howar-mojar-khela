@@ -3,10 +3,14 @@
 	import { send } from '$lib/utils/websocket';
 	import { diceFace } from '$lib/utils/dice';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
+	import UnsoldModal from '$lib/components/UnsoldModal.svelte';
+
+	let { onselecttile }: { onselecttile?: (id: number) => void } = $props();
 
 	let buildTileId = $state<number | null>(null);
 	let adminD1 = $state(6);
 	let adminD2 = $state(6);
+	let showUnsold = $state(false);
 
 	const tilesList = $derived(
 		Object.values(gameStore.gameState?.tiles ?? {}).sort((a, b) => a.id - b.id)
@@ -63,6 +67,24 @@
 			{diceFace(shownDice[0])}{diceFace(shownDice[1])}
 			<span class="ml-1 align-middle text-sm text-slate-500">= {shownDice[0] + shownDice[1]}</span>
 		</p>
+		{#if allSold}
+			<p class="mb-2 rounded-xl border border-emerald-600/20 bg-emerald-50 px-3 py-1.5 text-center text-xs font-medium text-emerald-900">
+				✅ সব সম্পত্তি বিক্রি — বাড়ি তৈরি করা যাবে!
+			</p>
+		{:else}
+			<button
+				class="mb-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-center text-xs text-slate-600 transition hover:border-emerald-600/50 hover:bg-emerald-50/50 active:scale-[0.99]"
+				title="কোন সম্পত্তিগুলো এখনও অবিক্রীত — দেখতে ট্যাপ করুন"
+				onclick={() => (showUnsold = true)}
+			>
+				🏘️ অবিক্রীত <b class="text-slate-900">{unsoldCount}টি</b> — তালিকা দেখুন
+			</button>
+		{/if}
+		<UnsoldModal
+			open={showUnsold}
+			onclose={() => (showUnsold = false)}
+			onselect={(id) => onselecttile?.(id)}
+		/>
 	{/if}
 	{#if !gameStore.gameState}
 		<p class="text-sm text-slate-500">ঘরে যোগ দিন।</p>

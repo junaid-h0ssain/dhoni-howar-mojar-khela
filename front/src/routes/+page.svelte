@@ -108,7 +108,7 @@
 			</div>
 			<div class="order-2 flex flex-col gap-4 lg:col-start-2 lg:row-span-2">
 				<section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-					<ActionPanel />
+					<ActionPanel onselecttile={(id) => (selectedTile = id)} />
 				</section>
 				<section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 					<PlayerList onselect={(id) => (selectedPlayer = id)} />
