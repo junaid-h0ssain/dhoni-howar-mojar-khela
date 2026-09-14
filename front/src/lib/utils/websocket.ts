@@ -334,19 +334,9 @@ export function disconnect(): void {
 }
 
 function applyGameState(next: GameState) {
-	const prev = gameStore.gameState;
+	// Authoritative state applies immediately — dice render straight from
+	// the server snapshot with no client-side shuffle/wait.
 	gameStore.gameState = next;
-	// A changed dice pair means a roll just landed: play the 1s shuffle for
-	// the roller and every spectator, then reveal the authoritative faces.
-	// Skip the animation on first load (no previous state to compare).
-	if (
-		prev &&
-		next.status === 'IN_GAME' &&
-		Array.isArray(next.dice) &&
-		(prev.dice[0] !== next.dice[0] || prev.dice[1] !== next.dice[1])
-	) {
-		gameStore.settleDiceRoll([next.dice[0], next.dice[1]]);
-	}
 }
 
 function handleMessage(raw: string) {

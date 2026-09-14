@@ -28,41 +28,6 @@
 	background: rgba(52, 211, 153, 0.6);
 }
 
-@keyframes dice-pop {
-	0% {
-		transform: scale(0.4) rotate(-18deg);
-		opacity: 0;
-		filter: blur(4px);
-	}
-	55% {
-		transform: scale(1.25) rotate(6deg);
-		opacity: 1;
-		filter: blur(0);
-	}
-	100% {
-		transform: scale(1) rotate(0deg);
-		opacity: 1;
-	}
-}
-
-@keyframes dice-roll {
-	0% {
-		transform: scale(1) rotate(0deg);
-	}
-	25% {
-		transform: scale(1.3) rotate(14deg);
-	}
-	50% {
-		transform: scale(0.9) rotate(-12deg);
-	}
-	75% {
-		transform: scale(1.2) rotate(8deg);
-	}
-	100% {
-		transform: scale(1) rotate(0deg);
-	}
-}
-
 @keyframes log-in {
 	from {
 		transform: translateY(-10px) scale(0.97);
@@ -125,12 +90,6 @@
 	}
 }
 
-.anim-dice-pop {
-	animation: dice-pop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
-}
-.anim-dice-rolling {
-	animation: dice-roll 0.5s ease-in-out infinite;
-}
 .anim-log-in {
 	animation: log-in 0.4s ease both;
 }
@@ -151,8 +110,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.anim-dice-pop,
-	.anim-dice-rolling,
 	.anim-log-in,
 	.anim-modal-in,
 	.anim-float-slow,

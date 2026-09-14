@@ -210,11 +210,9 @@
 			ctx.fillText(roller.name, centerX, centerY - 8, 440);
 			ctx.font = `20px ${FONT_FAMILY}`;
 			ctx.fillStyle = '#64748b';
-			const [d1, d2] = gameStore.displayDice ?? gs.dice;
+			const [d1, d2] = gs.dice;
 			ctx.fillText(
-				gameStore.diceAnimating
-					? `পাশা ঘুরছে… ${diceFace(d1)}${diceFace(d2)}`
-					: `এর চাল চলছে · ${diceFace(d1)}${diceFace(d2)}`,
+				`এর চাল চলছে · ${diceFace(d1)}${diceFace(d2)}`,
 				centerX,
 				centerY + 28
 			);
@@ -243,11 +241,8 @@
 	});
 
 	$effect(() => {
-		// Re-draw whenever authoritative state changes (or the dice-shuffle
-		// animation ticks while a roll is animating).
+		// Re-draw whenever authoritative state changes.
 		void gameStore.gameState;
-		void gameStore.displayDice;
-		void gameStore.diceAnimating;
 		if (canvas) draw();
 	});
 
