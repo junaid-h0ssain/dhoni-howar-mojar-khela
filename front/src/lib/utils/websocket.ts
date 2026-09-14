@@ -229,7 +229,7 @@ export function disconnect(): void {
 function applyGameState(next: GameState) {
 	const prev = gameStore.gameState;
 	gameStore.gameState = next;
-	// A changed dice pair means a roll just landed: play the 5s shuffle for
+	// A changed dice pair means a roll just landed: play the 1s shuffle for
 	// the roller and every spectator, then reveal the authoritative faces.
 	// Skip the animation on first load (no previous state to compare).
 	if (

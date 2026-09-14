@@ -3,7 +3,7 @@
 import type { GameState } from '$lib/constants/boardData';
 
 /** How long the dice-roll animation plays before revealing the result. */
-export const DICE_ROLL_ANIMATION_MS = 5000;
+export const DICE_ROLL_ANIMATION_MS = 1000;
 
 class GameStore {
 	gameState = $state<GameState | null>(null);
@@ -12,7 +12,7 @@ class GameStore {
 	roomCode = $state<string | null>(null);
 	connection = $state<'idle' | 'connecting' | 'open' | 'closed'>('idle');
 	lastError = $state<string | null>(null);
-	/** True while the 5s dice-roll animation is playing. */
+	/** True while the 1s dice-roll animation is playing. */
 	diceAnimating = $state(false);
 	/** Faces to display while animating (random shuffle); null = show authoritative dice. */
 	displayDice = $state<[number, number] | null>(null);
@@ -62,7 +62,7 @@ class GameStore {
 		this.clearDiceAnimation();
 	}
 
-	// ——— 5s dice-roll animation ———
+	// ——— 1s dice-roll animation ———
 	// The server reveals the final dice immediately, so the client shuffles
 	// random faces for DICE_ROLL_ANIMATION_MS before settling on the
 	// authoritative result. `beginDiceRoll` gives the roller instant feedback
