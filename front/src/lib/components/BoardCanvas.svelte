@@ -322,6 +322,8 @@
 	$effect(() => {
 		// Track authoritative positions: new seats snap, movers hop.
 		// A fresh update mid-hop retargets from the tile already reached.
+		// (Never rewrite an in-flight hop to the same target — the write
+		// would retrigger this effect forever and freeze the UI.)
 		const ps = gameStore.gameState?.players ?? [];
 		const now = performance.now();
 		for (const p of ps) {
@@ -329,9 +331,12 @@
 				shownPos[p.id] = p.position;
 				continue;
 			}
-			const from = hops[p.id] ? hopTile(hops[p.id], now) : shownPos[p.id];
+			const inFlight = hops[p.id];
+			if (inFlight && inFlight.to === p.position) continue;
+			const from = inFlight ? hopTile(inFlight, now) : shownPos[p.id];
 			if (from === p.position) {
-				if (!hops[p.id]) shownPos[p.id] = p.position;
+				if (inFlight) delete hops[p.id];
+				else shownPos[p.id] = p.position;
 				continue;
 			}
 			if (reducedMotion) {
