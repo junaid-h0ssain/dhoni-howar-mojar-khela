@@ -2,6 +2,8 @@ package websocket
 
 import (
 	"crypto/rand"
+	"encoding/json"
+	"log"
 	"strings"
 	"sync"
 
@@ -12,15 +14,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// Hub manages active rooms (§7).
+// Hub manages active rooms (§7). Rooms also persist as snapshots in the store
+// so a restart or deploy rehydrates them on demand instead of wiping games.
 type Hub struct {
 	mu       sync.RWMutex
 	rooms    map[string]*Room
-	sessions store.SessionStore
+	sessions store.Store
 }
 
-// NewHub creates a Hub backed by the given session store.
-func NewHub(sessions store.SessionStore) *Hub {
+// NewHub creates a Hub backed by the given store.
+func NewHub(sessions store.Store) *Hub {
 	return &Hub{rooms: make(map[string]*Room), sessions: sessions}
 }
 
@@ -51,9 +54,14 @@ func (h *Hub) GenerateRoomCode() string {
 		h.mu.RLock()
 		_, exists := h.rooms[code]
 		h.mu.RUnlock()
-		if !exists {
-			return code
+		if exists {
+			continue
 		}
+		// Avoid reusing the code of a persisted (restart-surviving) room.
+		if found, err := h.sessions.GameExists(ctxBG(), code); err != nil || found {
+			continue
+		}
+		return code
 	}
 }
 
@@ -81,11 +89,11 @@ func (h *Hub) CreateRoom(hostName string) (*Room, *models.Player, string, error)
 
 	token := uuid.NewString()
 	_ = h.sessions.Save(ctxBG(), token,
-		store.Session{RoomID: code, PlayerID: playerID}, store.ReconnectTTL)
+		store.Session{RoomID: code, PlayerID: playerID}, store.SessionTTL)
 	return room, host, token, nil
 }
 
-// GetRoom finds a room by code (case-insensitive).
+// GetRoom finds a live room by code (case-insensitive).
 func (h *Hub) GetRoom(code string) (*Room, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -93,7 +101,48 @@ func (h *Hub) GetRoom(code string) (*Room, bool) {
 	return r, ok
 }
 
-// RemoveRoom deletes an empty room.
+// GetOrLoadRoom finds a live room, rehydrating it from its persisted snapshot
+// when a restart or deploy dropped it from memory. Offline seats come back as
+// IsConnected=false until their owners RECONNECT with their seat tokens.
+func (h *Hub) GetOrLoadRoom(code string) (*Room, bool) {
+	code = NormalizeCode(code)
+	h.mu.RLock()
+	r, ok := h.rooms[code]
+	h.mu.RUnlock()
+	if ok {
+		return r, true
+	}
+	data, found, err := h.sessions.LoadGame(ctxBG(), code)
+	if err != nil {
+		log.Printf("hub: snapshot load for room %s failed: %v", code, err)
+		return nil, false
+	}
+	if !found {
+		return nil, false
+	}
+	var st models.GameState
+	if err := json.Unmarshal(data, &st); err != nil {
+		log.Printf("hub: snapshot decode for room %s failed: %v", code, err)
+		return nil, false
+	}
+	if st.RoomID == "" {
+		st.RoomID = code
+	}
+	room := NewRoom(code, game.NewEngine(&st), h)
+	h.mu.Lock()
+	if existing, ok := h.rooms[code]; ok {
+		h.mu.Unlock()
+		return existing, true
+	}
+	h.rooms[code] = room
+	h.mu.Unlock()
+	go room.Run()
+	log.Printf("hub: rehydrated room %s from snapshot (%d players)", code, len(st.Players))
+	return room, true
+}
+
+// RemoveRoom drops a room from memory. The persisted snapshot stays until its
+// TTL so late returners can still rehydrate the game.
 func (h *Hub) RemoveRoom(code string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
