@@ -56,6 +56,14 @@
 							● চাল
 						</span>
 					{/if}
+					{#if p.inJail}
+						<span class="rounded-full bg-slate-700 px-1.5 text-xs text-white">🔒 জেলে</span>
+					{/if}
+					{#if (p.jailCards ?? 0) > 0}
+						<span class="rounded-full bg-purple-100 px-1.5 text-xs text-purple-800" title="জেল থেকে মুক্তির কার্ড">
+							🃏×{p.jailCards}
+						</span>
+					{/if}
 					{#if !p.isConnected}
 						<span class="rounded-full bg-slate-200 px-1.5 text-xs text-slate-500">অফলাইন</span>
 					{/if}
