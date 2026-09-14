@@ -531,12 +531,17 @@ When a player disconnects:
 
 1. Keep their player state.
 2. Mark `isConnected = false`.
-3. Start a **120-second reconnection window**.
-4. Keep the player in the room.
-5. If they reconnect using the session token, rebind their WebSocket connection.
-6. If they fail to reconnect within 120 seconds, handle them according to the game's disconnect policy.
+3. Start a **120-second gameplay grace window**: a stuck turn forfeits so the
+   game never stalls, but the player object stays in the game.
+4. Persist the full game snapshot + seat token in the store with a **24-hour
+   TTL** — reloads, app-switches, and backend restarts rehydrate from it.
+5. If they reconnect using the session token, rebind their WebSocket
+   connection (rehydrating the room from the snapshot if needed).
+6. If the snapshot/token TTL expires, the game is gone and the client rejoins
+   fresh with a friendly message.
 
-Redis should use an expiration time matching the reconnection window where appropriate.
+The store holds two key shapes (`session:<token>` → roomId/playerId,
+`game:<roomId>` → full GameState JSON), both expiring after 24h.
 
 ---
 
@@ -1414,10 +1419,10 @@ The project is considered complete when:
 * [ ] Jail works
 * [ ] Bankruptcy works
 * [ ] Victory condition works
-* [ ] Player disconnection is handled
-* [ ] Player reconnection works within 120 seconds
+* [ ] Player disconnection is handled (turn forfeits after 120s grace)
+* [ ] Player reconnection reclaims their seat within 24 hours
+* [ ] Game state survives backend restarts via persisted snapshots
 * [ ] Invalid actions are rejected
-* [ ] Game state survives normal WebSocket reconnects
 * [ ] Bangla text renders correctly
 * [ ] Canvas board works responsively
 * [ ] Player movement is animated
