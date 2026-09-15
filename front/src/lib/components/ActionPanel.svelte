@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { gameStore } from '$lib/stores/gameStore.svelte';
-	import { send } from '$lib/utils/websocket';
+	import { send } from '$lib/utils/polling';
 	import { diceFace } from '$lib/utils/dice';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 	import UnsoldModal from '$lib/components/UnsoldModal.svelte';

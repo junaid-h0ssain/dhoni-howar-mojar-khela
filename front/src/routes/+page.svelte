@@ -9,7 +9,7 @@
 	import SoldOutModal from '$lib/components/SoldOutModal.svelte';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 	import { gameStore } from '$lib/stores/gameStore.svelte';
-	import { connect, hasSavedSession, leaveRoom, retryNow, getReconnectAttempts } from '$lib/utils/websocket';
+	import { connect, hasSavedSession, leaveRoom, retryNow, getReconnectAttempts } from '$lib/utils/polling';
 
 	let selectedTile: number | null = $state(null);
 	let selectedPlayer: string | null = $state(null);
