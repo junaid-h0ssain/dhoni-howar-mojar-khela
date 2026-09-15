@@ -6,7 +6,7 @@
 	import { BOARD_SIZE, tileRect } from '$lib/utils/canvasRenderer';
 	import { tileIcon } from '$lib/utils/tileIcons';
 	import { diceFace } from '$lib/utils/dice';
-	import { send } from '$lib/utils/websocket';
+	import { send } from '$lib/utils/polling';
 
 	let { onselect }: { onselect?: (id: number) => void } = $props();
 

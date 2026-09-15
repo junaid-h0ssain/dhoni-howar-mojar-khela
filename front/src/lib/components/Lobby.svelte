@@ -4,19 +4,20 @@
 	import SplitText from '$lib/components/svelte-bits/SplitText.svelte';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 	import {
-		connect,
-		send,
+		createRoom,
+		joinRoomByCode,
 		loadSavedSession,
 		loadLastRoomId,
 		reconnectSaved,
 		clearSavedSession,
 		savePlayerName,
 		type SavedSession
-	} from '$lib/utils/websocket';
+	} from '$lib/utils/polling';
 
 	let playerName = $state('');
 	let roomCode = $state('');
 	let saved: SavedSession | null = $state(null);
+	let busy = $state(false);
 
 	onMount(() => {
 		saved = loadSavedSession();
@@ -33,38 +34,36 @@
 		saved = loadSavedSession();
 	}
 
-	function createRoom() {
-		if (!playerName.trim()) return;
-		savePlayerName(playerName.trim());
-		clearSavedSession();
-		savePlayerName(playerName.trim());
-		connect({ resume: false });
-		const wait = setInterval(() => {
-			if (gameStore.connection === 'open') {
-				clearInterval(wait);
-				send('CREATE_ROOM', { playerName: playerName.trim() });
-			}
-		}, 100);
+	async function createRoomHandler() {
+		if (!playerName.trim() || busy) return;
+		busy = true;
+		try {
+			savePlayerName(playerName.trim());
+			clearSavedSession();
+			savePlayerName(playerName.trim());
+			await createRoom(playerName.trim());
+		} finally {
+			busy = false;
+		}
 	}
 
-	function joinRoom() {
-		if (!playerName.trim() || !roomCode.trim()) return;
-		savePlayerName(playerName.trim());
-		clearSavedSession();
-		savePlayerName(playerName.trim());
-		connect({ resume: false });
-		const wait = setInterval(() => {
-			if (gameStore.connection === 'open') {
-				clearInterval(wait);
-				send('JOIN_ROOM', { roomId: roomCode.trim().toUpperCase(), playerName: playerName.trim() });
-			}
-		}, 100);
+	async function joinRoomHandler() {
+		if (!playerName.trim() || !roomCode.trim() || busy) return;
+		busy = true;
+		try {
+			savePlayerName(playerName.trim());
+			clearSavedSession();
+			savePlayerName(playerName.trim());
+			await joinRoomByCode(roomCode.trim().toUpperCase(), playerName.trim());
+		} finally {
+			busy = false;
+		}
 	}
 
-	function rejoin() {
+	async function rejoin() {
 		const s = loadSavedSession();
 		if (s?.playerName) playerName = s.playerName;
-		reconnectSaved();
+		await reconnectSaved();
 	}
 
 	function forgetSession() {
@@ -137,10 +136,11 @@
 				</label>
 
 				<button
-					class="w-full rounded-xl bg-emerald-600 px-4 py-2.5 font-bold text-white transition hover:bg-emerald-500 active:scale-95"
-					onclick={createRoom}
+					class="w-full rounded-xl bg-emerald-600 px-4 py-2.5 font-bold text-white transition hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
+					disabled={busy}
+					onclick={createRoomHandler}
 				>
-					🏝️ ঘর তৈরি করুন
+					{busy ? '…' : '🏝️ ঘর তৈরি করুন'}
 				</button>
 
 				<div class="border-t border-slate-200 pt-4">
@@ -158,10 +158,11 @@
 						/>
 					</label>
 					<button
-						class="mt-2 w-full rounded-xl bg-blue-600 px-4 py-2.5 font-bold text-white transition hover:bg-blue-500 active:scale-95"
-						onclick={joinRoom}
+						class="mt-2 w-full rounded-xl bg-blue-600 px-4 py-2.5 font-bold text-white transition hover:bg-blue-500 active:scale-95 disabled:opacity-50"
+						disabled={busy}
+						onclick={joinRoomHandler}
 					>
-						ঘরে যোগ দিন 🚪
+						{busy ? '…' : 'ঘরে যোগ দিন 🚪'}
 					</button>
 					<p class="mt-2 text-center text-xs text-slate-500">
 						খেলা শুরু হয়ে গেলেও Room Code দিয়ে মাঝখানে যোগ দেওয়া যাবে।
