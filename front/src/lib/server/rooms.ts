@@ -1,8 +1,6 @@
-// In-memory room store for the polling version.
-// NOTE: this lives in server memory. Works for local dev and single-instance
-// deploys. On Vercel serverless (multiple/cold instances) rooms can vanish —
-// move to Upstash Redis REST later if that bites (same key shape as Go:
-// session:<token> -> {roomId, playerId}, game:<roomId> -> snapshot).
+// Room operations for the polling version, backed by kv.ts.
+// Upstash REST in production (shared across Vercel instances — rooms survive
+// deploys and scale), in-memory fallback for local dev.
 import type { GameState } from '$lib/constants/boardData';
 import {
 	newRoomState, addPlayer, removePlayer, findPlayer,
@@ -10,6 +8,7 @@ import {
 	buildHouse, endTurn, payJailFine, useJailCard,
 	EngineError, type RoomState
 } from './engine';
+import { kvGet, kvSet, kvDel, type PersistedRoom } from './kv';
 
 interface Room {
 	id: string;
@@ -18,23 +17,16 @@ interface Room {
 	createdAt: number;
 }
 
-declare global {
-	// eslint-disable-next-line no-var
-	var __mahajoniRooms: Map<string, Room> | undefined;
+function toRoom(id: string, p: PersistedRoom): Room {
+	return { id, rs: p.rs, sessions: new Map(p.sessions), createdAt: p.createdAt };
 }
 
-function roomMap(): Map<string, Room> {
-	if (!globalThis.__mahajoniRooms) globalThis.__mahajoniRooms = new Map();
-	return globalThis.__mahajoniRooms;
+function persist(room: Room): PersistedRoom {
+	return { rs: room.rs, sessions: [...room.sessions.entries()], createdAt: room.createdAt };
 }
 
-export function generateRoomCode(): string {
-	const rooms = roomMap();
-	for (let i = 0; i < 50; i++) {
-		const code = String(Math.floor(1000 + Math.random() * 9000));
-		if (!rooms.has(code)) return code;
-	}
-	return String(Date.now()).slice(-4);
+async function save(room: Room): Promise<void> {
+	await kvSet(room.id, persist(room));
 }
 
 export function uid(): string {
@@ -43,18 +35,28 @@ export function uid(): string {
 	) + Date.now().toString(16).slice(-4);
 }
 
-export function getRoom(id: string): Room | undefined {
+export async function getRoom(id: string): Promise<Room | undefined> {
 	if (!id) return undefined;
-	return roomMap().get(id.trim().toUpperCase());
+	const norm = id.trim().toUpperCase();
+	const p = await kvGet(norm);
+	if (!p) return undefined;
+	return toRoom(norm, p);
 }
 
-export function createRoom(playerName: string): { room: Room; playerId: string; token: string } {
+async function generateRoomCode(): Promise<string> {
+	for (let i = 0; i < 50; i++) {
+		const code = String(Math.floor(1000 + Math.random() * 9000));
+		if (!(await kvGet(code))) return code;
+	}
+	return String(Date.now()).slice(-4);
+}
+
+export async function createRoom(playerName: string): Promise<{ room: Room; playerId: string; token: string }> {
 	const name = playerName.trim();
 	if (!name) throw new EngineError('INVALID_NAME', 'আপনার নাম দিন।');
-	const id = generateRoomCode();
+	const id = await generateRoomCode();
 	const rs = newRoomState(id, '');
 	const room: Room = { id, rs, sessions: new Map(), createdAt: Date.now() };
-	roomMap().set(id, room);
 	const playerId = uid();
 	room.rs.state.hostId = playerId;
 	addPlayer(rs, playerId, name);
@@ -63,13 +65,14 @@ export function createRoom(playerName: string): { room: Room; playerId: string; 
 	room.sessions.set(token, playerId);
 	rs.version++;
 	touch(room, playerId);
+	await save(room);
 	return { room, playerId, token };
 }
 
-export function joinRoom(roomId: string, playerName: string): { room: Room; playerId: string; token: string } {
+export async function joinRoom(roomId: string, playerName: string): Promise<{ room: Room; playerId: string; token: string }> {
 	const name = playerName.trim();
 	if (!name) throw new EngineError('INVALID_NAME', 'আপনার নাম দিন।');
-	const room = getRoom(roomId);
+	const room = await getRoom(roomId);
 	if (!room) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
 	const s = room.rs.state;
 	if (s.status === 'FINISHED') throw new EngineError('GAME_FINISHED', 'খেলা শেষ হয়ে গেছে। নতুন ঘর তৈরি করুন।');
@@ -85,6 +88,7 @@ export function joinRoom(roomId: string, playerName: string): { room: Room; play
 	room.sessions.set(token, playerId);
 	room.rs.version++;
 	touch(room, playerId);
+	await save(room);
 	return { room, playerId, token };
 }
 
@@ -111,14 +115,14 @@ export type ActionType =
 	| 'START_GAME' | 'ROLL_DICE' | 'BUY_PROPERTY' | 'BUILD_HOUSE'
 	| 'END_TURN' | 'PAY_JAIL_FINE' | 'USE_JAIL_CARD';
 
-export function applyAction(
+export async function applyAction(
 	room: Room, token: string, type: ActionType, payload: Record<string, unknown> = {}
-): void {
+): Promise<void> {
 	const playerId = playerIdFor(room, token);
 	if (!playerId) throw new EngineError('INVALID_SESSION', 'সেশন পাওয়া যায়নি। আবার যোগ দিন।');
 	const p = findPlayer(room.rs.state, playerId);
 	if (!p) throw new EngineError('PLAYER_NOT_FOUND', 'খেলোয়াড় পাওয়া যায়নি।');
-	if (room.rs.state.status === 'FINISHED' && type !== 'START_GAME') {
+	if (room.rs.state.status === 'FINISHED') {
 		throw new EngineError('GAME_FINISHED', 'খেলা শেষ হয়ে গেছে।');
 	}
 	touch(room, playerId);
@@ -176,9 +180,18 @@ export function applyAction(
 			throw new EngineError('UNKNOWN_ACTION', 'অজানা অ্যাকশন।');
 	}
 	bump(room);
+	await save(room);
 }
 
-export function leaveRoom(room: Room, token: string): void {
+export async function heartbeat(room: Room, token: string): Promise<void> {
+	const playerId = playerIdFor(room, token);
+	if (!playerId) return;
+	// Presence only — kvGet already refreshed the TTL, so skip the write and
+	// keep the 2s polls read-cheap.
+	touch(room, playerId);
+}
+
+export async function leaveRoom(room: Room, token: string): Promise<void> {
 	const playerId = playerIdFor(room, token);
 	if (!playerId) return;
 	const removed = removePlayer(room.rs, playerId);
@@ -186,10 +199,11 @@ export function leaveRoom(room: Room, token: string): void {
 	delete room.rs.lastSeen[playerId];
 	if (removed) room.rs.state.logs.push(`${removed.name} ঘর ছেড়ে গেছেন।`);
 	if (room.rs.state.players.length === 0) {
-		roomMap().delete(room.id);
+		await kvDel(room.id);
 		return;
 	}
 	bump(room);
+	await save(room);
 }
 
 function num(v: unknown): number | undefined {

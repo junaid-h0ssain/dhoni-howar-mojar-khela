@@ -6,7 +6,7 @@ import { EngineError } from '$lib/server/engine';
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const body = await request.json().catch(() => ({}));
-		const { room, playerId, token } = joinRoom(
+		const { room, playerId, token } = await joinRoom(
 			String(body?.roomId ?? ''),
 			String(body?.playerName ?? '')
 		);

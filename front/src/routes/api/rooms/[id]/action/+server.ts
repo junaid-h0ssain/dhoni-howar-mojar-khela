@@ -10,7 +10,7 @@ const ACTIONS: ActionType[] = [
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	try {
-		const room = getRoom(params.id ?? '');
+		const room = await getRoom(params.id ?? '');
 		if (!room) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
 		const body = await request.json().catch(() => ({}));
 		const type = String(body?.type ?? '');
@@ -19,7 +19,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 		const payload = (body?.payload ?? {}) as Record<string, unknown>;
 		const token = String(body?.sessionToken ?? '');
-		applyAction(room, token, type as ActionType, payload);
+		await applyAction(room, token, type as ActionType, payload);
 		const { state, version } = toClient(room);
 		return json({ state, version });
 	} catch (e) {

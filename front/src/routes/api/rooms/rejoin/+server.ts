@@ -8,7 +8,7 @@ import { EngineError } from '$lib/server/engine';
 export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const body = await request.json().catch(() => ({}));
-		const room = getRoom(String(body?.roomId ?? ''));
+		const room = await getRoom(String(body?.roomId ?? ''));
 		if (!room) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
 		const token = String(body?.sessionToken ?? '');
 		const playerId = playerIdFor(room, token);

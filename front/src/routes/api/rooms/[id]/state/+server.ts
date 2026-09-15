@@ -1,17 +1,17 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getRoom, playerIdFor, touch, toClient } from '$lib/server/rooms';
+import { getRoom, playerIdFor, heartbeat, toClient } from '$lib/server/rooms';
 import { EngineError } from '$lib/server/engine';
 
 // Poll endpoint: returns the authoritative state. Clients call this every
 // ~2s. Passing sessionToken refreshes presence (lastSeen).
 export const GET: RequestHandler = async ({ params, url }) => {
 	try {
-		const room = getRoom(params.id ?? '');
+		const room = await getRoom(params.id ?? '');
 		if (!room) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
 		const token = url.searchParams.get('sessionToken') ?? '';
 		const playerId = playerIdFor(room, token);
-		if (playerId) touch(room, playerId);
+		if (playerId) heartbeat(room, playerId);
 		const { state, version } = toClient(room);
 		return json({ state, version });
 	} catch (e) {
