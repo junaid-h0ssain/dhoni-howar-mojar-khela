@@ -131,7 +131,7 @@
 					<input
 						class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
 						bind:value={playerName}
-						placeholder="যেমন: রাফি"
+						placeholder="যেমন: ঝন্টু"
 					/>
 				</label>
 
