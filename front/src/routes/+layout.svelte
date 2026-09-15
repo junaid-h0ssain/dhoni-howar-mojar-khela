@@ -13,6 +13,6 @@
 
 <style>
 	:global(body) {
-		font-family: 'Hind Siliguri', 'Kalpurush', system-ui, sans-serif;
+		font-family: 'Noto Sans Bengali', 'Hind Siliguri', system-ui, sans-serif;
 	}
 </style>

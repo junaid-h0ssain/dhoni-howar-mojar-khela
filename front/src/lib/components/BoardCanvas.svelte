@@ -12,7 +12,7 @@
 
 	let canvas: HTMLCanvasElement;
 
-	const FONT_FAMILY = '"Hind Siliguri", sans-serif';
+	const FONT_FAMILY = '"Noto Sans Bengali", sans-serif';
 
 	// ——— Token hop animation ———
 	// When a token changes tiles it hops forward tile-by-tile (one bounce per
