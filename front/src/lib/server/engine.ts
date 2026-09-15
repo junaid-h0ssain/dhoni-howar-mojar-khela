@@ -175,10 +175,6 @@ function shuffledDeck(n: number): number[] {
 	return d;
 }
 
-export function isAdmin(p: Player | null | undefined): boolean {
-	return !!p && p.name.trim() === 'ADMINISTRATOR';
-}
-
 export interface RoomState {
 	state: GameState;
 	version: number;
@@ -669,22 +665,11 @@ export function startGame(rs: RoomState): void {
 	appendLog(s, 'খেলা শুরু হয়েছে!');
 }
 
-export interface ForcedDice { d1: number; d2: number }
-
-export function rollDice(rs: RoomState, playerId: string, forced?: ForcedDice): void {
+export function rollDice(rs: RoomState, playerId: string): void {
 	const s = rs.state;
 	const p = requireTurn(rs, playerId, ['ROLL']);
-	let d1: number, d2: number;
-	if (forced) {
-		if (!isAdmin(p)) throw errEngine('NOT_ADMIN', 'শুধু ADMINISTRATOR পাশা নিয়ন্ত্রণ করতে পারবেন।');
-		if (forced.d1 < 1 || forced.d1 > 6 || forced.d2 < 1 || forced.d2 > 6) {
-			throw errEngine('INVALID_DICE', 'পাশার মান ১-৬ এর মধ্যে হতে হবে।');
-		}
-		d1 = forced.d1; d2 = forced.d2;
-	} else {
-		d1 = 1 + Math.floor(Math.random() * 6);
-		d2 = 1 + Math.floor(Math.random() * 6);
-	}
+	const d1 = 1 + Math.floor(Math.random() * 6);
+	const d2 = 1 + Math.floor(Math.random() * 6);
 	s.dice = [d1, d2];
 	appendLog(s, `${p.name} পাশা ফেলেছেন: ${d1} + ${d2}`);
 	if (p.inJail) {

@@ -8,7 +8,7 @@ import {
 	buildHouse, endTurn, payJailFine, useJailCard,
 	EngineError, type RoomState
 } from './engine';
-import { kvGet, kvSet, kvDel, type PersistedRoom } from './kv';
+import { kvGet, kvSet, kvSetIfAbsent, kvDel, kvTryLock, kvReleaseLock, type PersistedRoom } from './kv';
 
 interface Room {
 	id: string;
@@ -30,9 +30,27 @@ async function save(room: Room): Promise<void> {
 }
 
 export function uid(): string {
-	return 'xxxxxxxx-xxxx-4xxx'.replace(/x/g, () =>
-		Math.floor(Math.random() * 16).toString(16)
-	) + Date.now().toString(16).slice(-4);
+	return crypto.randomUUID();
+}
+
+const LOCK_TTL_MS = 5_000;
+const LOCK_ATTEMPTS = 20;
+
+async function withRoomLock<T>(roomId: string, work: () => Promise<T>): Promise<T> {
+	const id = roomId.trim().toUpperCase();
+	if (!id) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
+	const token = uid();
+	for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
+		if (await kvTryLock(id, token, LOCK_TTL_MS)) {
+			try {
+				return await work();
+			} finally {
+				await kvReleaseLock(id, token);
+			}
+		}
+		await new Promise((resolve) => setTimeout(resolve, 25 + Math.random() * 50));
+	}
+	throw new EngineError('ROOM_BUSY', 'ঘরটি ব্যস্ত আছে। আবার চেষ্টা করুন।');
 }
 
 export async function getRoom(id: string): Promise<Room | undefined> {
@@ -54,58 +72,52 @@ async function generateRoomCode(): Promise<string> {
 export async function createRoom(playerName: string): Promise<{ room: Room; playerId: string; token: string }> {
 	const name = playerName.trim();
 	if (!name) throw new EngineError('INVALID_NAME', 'আপনার নাম দিন।');
-	const id = await generateRoomCode();
-	const rs = newRoomState(id, '');
-	const room: Room = { id, rs, sessions: new Map(), createdAt: Date.now() };
-	const playerId = uid();
-	room.rs.state.hostId = playerId;
-	addPlayer(rs, playerId, name);
-	rs.state.logs.push(`${name} ঘর তৈরি করেছেন।`);
-	const token = uid() + uid().slice(0, 8);
-	room.sessions.set(token, playerId);
-	rs.version++;
-	touch(room, playerId);
-	await save(room);
-	return { room, playerId, token };
+	if (name.length > 32) throw new EngineError('INVALID_NAME', 'নাম ৩২ অক্ষরের মধ্যে রাখুন।');
+	for (let attempt = 0; attempt < 50; attempt++) {
+		const id = await generateRoomCode();
+		const rs = newRoomState(id, '');
+		const room: Room = { id, rs, sessions: new Map(), createdAt: Date.now() };
+		const playerId = uid();
+		room.rs.state.hostId = playerId;
+		addPlayer(rs, playerId, name);
+		rs.state.logs.push(`${name} ঘর তৈরি করেছেন।`);
+		const token = uid();
+		room.sessions.set(token, playerId);
+		rs.version++;
+		touch(room, playerId);
+		if (await kvSetIfAbsent(id, persist(room))) return { room, playerId, token };
+	}
+	throw new EngineError('ROOM_CREATE_FAILED', 'ঘর তৈরি করা যায়নি। আবার চেষ্টা করুন।');
 }
 
 export async function joinRoom(roomId: string, playerName: string): Promise<{ room: Room; playerId: string; token: string }> {
 	const name = playerName.trim();
 	if (!name) throw new EngineError('INVALID_NAME', 'আপনার নাম দিন।');
-	const room = await getRoom(roomId);
-	if (!room) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
-	const s = room.rs.state;
-	if (s.status === 'FINISHED') throw new EngineError('GAME_FINISHED', 'খেলা শেষ হয়ে গেছে। নতুন ঘর তৈরি করুন।');
-	if (s.status !== 'LOBBY' && s.status !== 'IN_GAME') {
-		throw new EngineError('GAME_ALREADY_STARTED', 'এই ঘরে এখন যোগ দেওয়া যাবে না।');
-	}
-	if (s.players.length >= 10) throw new EngineError('ROOM_FULL', 'ঘর পূর্ণ হয়ে গেছে।');
-	// Option 1 — unique names per room + auto-reclaim: a returning player with
-	// the same name (case-insensitive) rebinds to their existing seat instead
-	// of starting fresh, so cash/position/properties resume where they left.
-	const existing = s.players.find((p) => p.name.trim().toLowerCase() === name.toLowerCase());
-	if (existing) {
-		if (existing.isBankrupt) {
-			throw new EngineError('SEAT_BANKRUPT', 'এই নামের আসনটি দেউলিয়া হয়ে গেছে। অন্য নামে যোগ দিন।');
+	if (name.length > 32) throw new EngineError('INVALID_NAME', 'নাম ৩২ অক্ষরের মধ্যে রাখুন।');
+	return withRoomLock(roomId, async () => {
+		const room = await getRoom(roomId);
+		if (!room) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
+		const s = room.rs.state;
+		if (s.status === 'FINISHED') throw new EngineError('GAME_FINISHED', 'খেলা শেষ হয়ে গেছে। নতুন ঘর তৈরি করুন।');
+		if (s.status !== 'LOBBY' && s.status !== 'IN_GAME') {
+			throw new EngineError('GAME_ALREADY_STARTED', 'এই ঘরে এখন যোগ দেওয়া যাবে না।');
 		}
-		const token = uid() + uid().slice(0, 8);
-		room.sessions.set(token, existing.id);
+		if (s.players.length >= 10) throw new EngineError('ROOM_FULL', 'ঘর পূর্ণ হয়ে গেছে।');
+		const existing = s.players.find((p) => p.name.trim().toLowerCase() === name.toLowerCase());
+		if (existing) {
+			throw new EngineError('NAME_TAKEN', 'এই নামটি ইতিমধ্যে ব্যবহৃত হচ্ছে। পুরনো আসনে ফিরতে আপনার সেশন ব্যবহার করুন।');
+		}
+		const playerId = uid();
+		const p = addPlayer(room.rs, playerId, name);
+		if (s.status === 'IN_GAME') s.logs.push(`${p.name} খেলার মাঝে যোগ দিয়েছেন।`);
+		else s.logs.push(`${p.name} ঘরে যোগ দিয়েছেন।`);
+		const token = uid();
+		room.sessions.set(token, playerId);
 		room.rs.version++;
-		touch(room, existing.id);
-		s.logs.push(`${existing.name} পুনরায় যোগ দিয়েছেন।`);
+		touch(room, playerId);
 		await save(room);
-		return { room, playerId: existing.id, token };
-	}
-	const playerId = uid();
-	const p = addPlayer(room.rs, playerId, name);
-	if (s.status === 'IN_GAME') s.logs.push(`${p.name} খেলার মাঝে যোগ দিয়েছেন।`);
-	else s.logs.push(`${p.name} ঘরে যোগ দিয়েছেন।`);
-	const token = uid() + uid().slice(0, 8);
-	room.sessions.set(token, playerId);
-	room.rs.version++;
-	touch(room, playerId);
-	await save(room);
-	return { room, playerId, token };
+		return { room, playerId, token };
+	});
 }
 
 export function playerIdFor(room: Room, token: string): string | undefined {
@@ -132,17 +144,20 @@ export type ActionType =
 	| 'END_TURN' | 'PAY_JAIL_FINE' | 'USE_JAIL_CARD';
 
 export async function applyAction(
-	room: Room, token: string, type: ActionType, payload: Record<string, unknown> = {}
-): Promise<void> {
-	const playerId = playerIdFor(room, token);
-	if (!playerId) throw new EngineError('INVALID_SESSION', 'সেশন পাওয়া যায়নি। আবার যোগ দিন।');
-	const p = findPlayer(room.rs.state, playerId);
-	if (!p) throw new EngineError('PLAYER_NOT_FOUND', 'খেলোয়াড় পাওয়া যায়নি।');
-	if (room.rs.state.status === 'FINISHED') {
-		throw new EngineError('GAME_FINISHED', 'খেলা শেষ হয়ে গেছে।');
-	}
-	touch(room, playerId);
-	switch (type) {
+	roomId: string, token: string, type: ActionType, payload: Record<string, unknown> = {}
+	): Promise<Room> {
+	return withRoomLock(roomId, async () => {
+		const room = await getRoom(roomId);
+		if (!room) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
+		const playerId = playerIdFor(room, token);
+		if (!playerId) throw new EngineError('INVALID_SESSION', 'সেশন পাওয়া যায়নি। আবার যোগ দিন।');
+		const p = findPlayer(room.rs.state, playerId);
+		if (!p) throw new EngineError('PLAYER_NOT_FOUND', 'খেলোয়াড় পাওয়া যায়নি।');
+		if (room.rs.state.status === 'FINISHED') {
+			throw new EngineError('GAME_FINISHED', 'খেলা শেষ হয়ে গেছে।');
+		}
+		touch(room, playerId);
+		switch (type) {
 		case 'START_GAME': {
 			if (room.rs.state.hostId !== playerId) {
 				throw new EngineError('NOT_HOST', 'শুধু হোস্ট খেলা শুরু করতে পারবেন।');
@@ -151,23 +166,7 @@ export async function applyAction(
 			break;
 		}
 		case 'ROLL_DICE': {
-			const d1 = num(payload['d1']);
-			const d2 = num(payload['d2']);
-			const dice = payload['dice'];
-			let forced: { d1: number; d2: number } | undefined;
-			if (Array.isArray(dice) && dice.length === 2) {
-				const a = Number(dice[0]); const b = Number(dice[1]);
-				if (!Number.isInteger(a) || !Number.isInteger(b)) {
-					throw new EngineError('INVALID_DICE', 'পাশার মান ১-৬ এর মধ্যে হতে হবে।');
-				}
-				forced = { d1: a, d2: b };
-			} else if (d1 !== undefined || d2 !== undefined) {
-				if (d1 === undefined || d2 === undefined) {
-					throw new EngineError('INVALID_DICE', 'পাশার মান ১-৬ এর মধ্যে হতে হবে।');
-				}
-				forced = { d1, d2 };
-			}
-			rollDice(room.rs, playerId, forced);
+			rollDice(room.rs, playerId);
 			autoEndIfNoAction(room.rs, playerId);
 			break;
 		}
@@ -195,36 +194,29 @@ export async function applyAction(
 		default:
 			throw new EngineError('UNKNOWN_ACTION', 'অজানা অ্যাকশন।');
 	}
-	bump(room);
-	await save(room);
+		bump(room);
+		await save(room);
+		return room;
+	});
 }
 
-export async function heartbeat(room: Room, token: string): Promise<void> {
-	const playerId = playerIdFor(room, token);
-	if (!playerId) return;
-	// Presence only — kvGet already refreshed the TTL, so skip the write and
-	// keep the 2s polls read-cheap.
-	touch(room, playerId);
-}
-
-export async function leaveRoom(room: Room, token: string): Promise<void> {
-	const playerId = playerIdFor(room, token);
-	if (!playerId) return;
-	const removed = removePlayer(room.rs, playerId);
-	room.sessions.delete(token);
-	delete room.rs.lastSeen[playerId];
-	if (removed) room.rs.state.logs.push(`${removed.name} ঘর ছেড়ে গেছেন।`);
-	if (room.rs.state.players.length === 0) {
-		await kvDel(room.id);
-		return;
-	}
-	bump(room);
-	await save(room);
-}
-
-function num(v: unknown): number | undefined {
-	if (typeof v === 'number' && Number.isInteger(v)) return v;
-	return undefined;
+export async function leaveRoom(roomId: string, token: string): Promise<void> {
+	await withRoomLock(roomId, async () => {
+		const room = await getRoom(roomId);
+		if (!room) return;
+		const playerId = playerIdFor(room, token);
+		if (!playerId) return;
+		const removed = removePlayer(room.rs, playerId);
+		room.sessions.delete(token);
+		delete room.rs.lastSeen[playerId];
+		if (removed) room.rs.state.logs.push(`${removed.name} ঘর ছেড়ে গেছেন।`);
+		if (room.rs.state.players.length === 0) {
+			await kvDel(room.id);
+			return;
+		}
+		bump(room);
+		await save(room);
+	});
 }
 
 function int(v: unknown, fallback: number): number {

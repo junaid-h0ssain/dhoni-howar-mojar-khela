@@ -1,3 +1,2 @@
-// Fully client-driven app (game state arrives over WebSocket) —
-// prerender to static output so no server function sits in the request path.
+// The UI is prerendered; game state is served by SvelteKit API routes.
 export const prerender = true;

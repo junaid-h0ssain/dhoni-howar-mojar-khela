@@ -19,6 +19,9 @@ const TTL_SECONDS = 24 * 60 * 60;
 function restConfig(): { url: string; token: string } | null {
 	const url = (env.UPSTASH_REDIS_REST_URL ?? '').trim().replace(/\/+$/, '');
 	const token = (env.UPSTASH_REDIS_REST_TOKEN ?? '').trim();
+	if ((!url || !token) && env.VERCEL === '1') {
+		throw new Error('Upstash Redis must be configured in Vercel.');
+	}
 	return url && token ? { url, token } : null;
 }
 
@@ -50,11 +53,18 @@ function key(id: string): string {
 declare global {
 	// eslint-disable-next-line no-var
 	var __mahajoniKv: Map<string, { data: PersistedRoom; expiresAt: number }> | undefined;
+	// eslint-disable-next-line no-var
+	var __mahajoniLocks: Map<string, { token: string; expiresAt: number }> | undefined;
 }
 
 function memMap(): Map<string, { data: PersistedRoom; expiresAt: number }> {
 	if (!globalThis.__mahajoniKv) globalThis.__mahajoniKv = new Map();
 	return globalThis.__mahajoniKv;
+}
+
+function memLocks(): Map<string, { token: string; expiresAt: number }> {
+	if (!globalThis.__mahajoniLocks) globalThis.__mahajoniLocks = new Map();
+	return globalThis.__mahajoniLocks;
 }
 
 export async function kvGet(id: string): Promise<PersistedRoom | null> {
@@ -97,6 +107,58 @@ export async function kvSet(id: string, data: PersistedRoom): Promise<void> {
 	}
 }
 
+export async function kvSetIfAbsent(id: string, data: PersistedRoom): Promise<boolean> {
+	const k = key(id);
+	if (!restConfig()) {
+		if (memMap().has(k)) return false;
+		memMap().set(k, { data, expiresAt: Date.now() + TTL_SECONDS * 1000 });
+		return true;
+	}
+	try {
+		const [result] = await pipeline([['SET', k, JSON.stringify(data), 'NX', 'EX', TTL_SECONDS]]);
+		return result?.result === 'OK';
+	} catch (e) {
+		console.error(`kvSetIfAbsent ${id} failed:`, e);
+		throw new Error('Storage unavailable. Try again.');
+	}
+}
+
+export async function kvTryLock(id: string, token: string, ttlMs: number): Promise<boolean> {
+	const k = `${key(id)}:lock`;
+	if (!restConfig()) {
+		const existing = memLocks().get(k);
+		if (existing && existing.expiresAt > Date.now()) return false;
+		memLocks().set(k, { token, expiresAt: Date.now() + ttlMs });
+		return true;
+	}
+	try {
+		const [result] = await pipeline([['SET', k, token, 'NX', 'PX', ttlMs]]);
+		return result?.result === 'OK';
+	} catch (e) {
+		console.error(`kvTryLock ${id} failed:`, e);
+		throw new Error('Storage unavailable. Try again.');
+	}
+}
+
+export async function kvReleaseLock(id: string, token: string): Promise<void> {
+	const k = `${key(id)}:lock`;
+	if (!restConfig()) {
+		if (memLocks().get(k)?.token === token) memLocks().delete(k);
+		return;
+	}
+	try {
+		await pipeline([[
+			'EVAL',
+			'if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) end return 0',
+			1,
+			k,
+			token
+		]]);
+	} catch (e) {
+		console.error(`kvReleaseLock ${id} failed:`, e);
+	}
+}
+
 export async function kvDel(id: string): Promise<void> {
 	const k = key(id);
 	if (!restConfig()) {
@@ -107,5 +169,6 @@ export async function kvDel(id: string): Promise<void> {
 		await pipeline([['DEL', k]]);
 	} catch (e) {
 		console.error(`kvDel ${id} failed:`, e);
+		throw new Error('Storage unavailable. Try again.');
 	}
 }

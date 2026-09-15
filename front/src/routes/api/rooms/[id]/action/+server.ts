@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getRoom, applyAction, toClient, type ActionType } from '$lib/server/rooms';
+import { applyAction, toClient, type ActionType } from '$lib/server/rooms';
 import { EngineError } from '$lib/server/engine';
 
 const ACTIONS: ActionType[] = [
@@ -10,8 +10,6 @@ const ACTIONS: ActionType[] = [
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	try {
-		const room = await getRoom(params.id ?? '');
-		if (!room) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
 		const body = await request.json().catch(() => ({}));
 		const type = String(body?.type ?? '');
 		if (!ACTIONS.includes(type as ActionType)) {
@@ -19,7 +17,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 		const payload = (body?.payload ?? {}) as Record<string, unknown>;
 		const token = String(body?.sessionToken ?? '');
-		await applyAction(room, token, type as ActionType, payload);
+		const room = await applyAction(params.id ?? '', token, type as ActionType, payload);
 		const { state, version } = toClient(room);
 		return json({ state, version });
 	} catch (e) {

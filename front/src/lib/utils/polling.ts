@@ -73,6 +73,7 @@ export function clearSavedSession() {
 }
 
 function persistSession(roomId: string, playerId: string, token: string) {
+	if (gameStore.roomCode !== roomId) latestStateVersion = -1;
 	gameStore.roomCode = roomId;
 	gameStore.playerId = playerId;
 	gameStore.sessionToken = token;
@@ -85,6 +86,9 @@ function persistSession(roomId: string, playerId: string, token: string) {
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let pollFailures = 0;
 let netListenersAttached = false;
+let stateRequest: Promise<boolean> | null = null;
+let actionRequest: Promise<void> | null = null;
+let latestStateVersion = -1;
 
 export function getReconnectAttempts(): number {
 	return pollFailures;
@@ -110,7 +114,11 @@ function ensureNetListeners() {
 	});
 }
 
-function applyState(state: GameState) {
+function applyState(state: GameState, version?: number) {
+	if (version !== undefined) {
+		if (version < latestStateVersion) return;
+		latestStateVersion = version;
+	}
 	gameStore.gameState = state;
 	if (state.roomId) {
 		gameStore.roomCode = state.roomId;
@@ -127,12 +135,22 @@ function applyState(state: GameState) {
 }
 
 async function fetchState(): Promise<boolean> {
+	if (stateRequest) return stateRequest;
+	stateRequest = fetchStateOnce();
+	try {
+		return await stateRequest;
+	} finally {
+		stateRequest = null;
+	}
+}
+
+async function fetchStateOnce(): Promise<boolean> {
 	const saved = loadSavedSession();
 	if (!saved) return false;
 	try {
-		const res = await fetch(
-			`/api/rooms/${encodeURIComponent(saved.roomId)}/state?sessionToken=${encodeURIComponent(saved.sessionToken)}`
-		);
+		const res = await fetch(`/api/rooms/${encodeURIComponent(saved.roomId)}/state`, {
+			headers: { authorization: `Bearer ${saved.sessionToken}` }
+		});
 		if (!res.ok) {
 			if (res.status === 404) {
 				const body = await res.json().catch(() => ({}));
@@ -141,7 +159,7 @@ async function fetchState(): Promise<boolean> {
 			throw new Error(`state ${res.status}`);
 		}
 		const body = await res.json();
-		applyState(body.state as GameState);
+		applyState(body.state as GameState, body.version as number);
 		gameStore.connection = 'open';
 		gameStore.lastError = null;
 		pollFailures = 0;
@@ -203,7 +221,7 @@ export async function createRoom(playerName: string): Promise<boolean> {
 			return false;
 		}
 		persistSession(body.roomId, body.playerId, body.sessionToken);
-		applyState(body.state as GameState);
+		applyState(body.state as GameState, body.version as number);
 		gameStore.connection = 'open';
 		startPolling();
 		return true;
@@ -231,7 +249,7 @@ export async function joinRoomByCode(roomId: string, playerName: string): Promis
 			return false;
 		}
 		persistSession(body.roomId, body.playerId, body.sessionToken);
-		applyState(body.state as GameState);
+		applyState(body.state as GameState, body.version as number);
 		gameStore.connection = 'open';
 		startPolling();
 		return true;
@@ -267,7 +285,7 @@ export async function reconnectSaved(): Promise<boolean> {
 			return false;
 		}
 		persistSession(body.roomId, body.playerId, body.sessionToken);
-		applyState(body.state as GameState);
+		applyState(body.state as GameState, body.version as number);
 		gameStore.connection = 'open';
 		startPolling();
 		return true;
@@ -302,6 +320,16 @@ export function retryNow(): void {
 
 /** Send a game action (ROLL_DICE, BUY_PROPERTY, …) via POST. */
 export async function send(type: string, payload: Record<string, unknown> = {}): Promise<void> {
+	if (actionRequest) return actionRequest;
+	actionRequest = sendOnce(type, payload);
+	try {
+		await actionRequest;
+	} finally {
+		actionRequest = null;
+	}
+}
+
+async function sendOnce(type: string, payload: Record<string, unknown> = {}): Promise<void> {
 	const saved = loadSavedSession();
 	if (!saved) {
 		gameStore.lastError = 'ঘরে যোগ দিন।';
@@ -318,7 +346,7 @@ export async function send(type: string, payload: Record<string, unknown> = {}):
 			handleServerError(body);
 			return;
 		}
-		applyState(body.state as GameState);
+		applyState(body.state as GameState, body.version as number);
 		gameStore.lastError = null;
 	} catch {
 		gameStore.lastError = 'সংযোগে সমস্যা হয়েছে।';
