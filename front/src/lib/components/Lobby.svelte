@@ -164,9 +164,10 @@
 					>
 						{busy ? '…' : 'ঘরে যোগ দিন 🚪'}
 					</button>
-					<p class="mt-2 text-center text-xs text-slate-500">
-						খেলা শুরু হয়ে গেলেও Room Code দিয়ে মাঝখানে যোগ দেওয়া যাবে।
-					</p>
+						<p class="mt-2 text-center text-xs text-slate-500">
+							খেলা শুরু হয়ে গেলেও Room Code দিয়ে মাঝখানে যোগ দেওয়া যাবে। একই নামে
+							ঢুকলে আগের টাকা-জমি-চাল ফিরে পাবেন।
+						</p>
 				</div>
 
 				{#if gameStore.lastError}

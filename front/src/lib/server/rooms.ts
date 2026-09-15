@@ -80,6 +80,22 @@ export async function joinRoom(roomId: string, playerName: string): Promise<{ ro
 		throw new EngineError('GAME_ALREADY_STARTED', 'এই ঘরে এখন যোগ দেওয়া যাবে না।');
 	}
 	if (s.players.length >= 10) throw new EngineError('ROOM_FULL', 'ঘর পূর্ণ হয়ে গেছে।');
+	// Option 1 — unique names per room + auto-reclaim: a returning player with
+	// the same name (case-insensitive) rebinds to their existing seat instead
+	// of starting fresh, so cash/position/properties resume where they left.
+	const existing = s.players.find((p) => p.name.trim().toLowerCase() === name.toLowerCase());
+	if (existing) {
+		if (existing.isBankrupt) {
+			throw new EngineError('SEAT_BANKRUPT', 'এই নামের আসনটি দেউলিয়া হয়ে গেছে। অন্য নামে যোগ দিন।');
+		}
+		const token = uid() + uid().slice(0, 8);
+		room.sessions.set(token, existing.id);
+		room.rs.version++;
+		touch(room, existing.id);
+		s.logs.push(`${existing.name} পুনরায় যোগ দিয়েছেন।`);
+		await save(room);
+		return { room, playerId: existing.id, token };
+	}
 	const playerId = uid();
 	const p = addPlayer(room.rs, playerId, name);
 	if (s.status === 'IN_GAME') s.logs.push(`${p.name} খেলার মাঝে যোগ দিয়েছেন।`);
