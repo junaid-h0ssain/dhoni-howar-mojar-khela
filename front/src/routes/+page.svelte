@@ -10,7 +10,7 @@
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 	import { gameStore } from '$lib/stores/gameStore.svelte';
 	import { connect, hasSavedSession, leaveRoom, retryNow, getReconnectAttempts } from '$lib/utils/polling';
-	import { playDiceRoll, playJail, unlockAudio, isMuted, setMuted } from '$lib/utils/sound';
+	import { playDiceRoll, playDouble, playBuild, playJail, unlockAudio, isMuted, setMuted } from '$lib/utils/sound';
 
 	let selectedTile: number | null = $state(null);
 	let selectedPlayer: string | null = $state(null);
@@ -47,7 +47,10 @@
 	}
 
 	// Game sounds: react to newly appended authoritative log entries.
-	// Dice ("পাশা ফেলেছেন") → rattle; sent to jail ("জেলে গেছেন") → sting.
+	// Dice ("পাশা ফেলেছেন") → rattle; double-six ("জোড়া পেয়েছেন") layers a
+	// fanfare on top; builds ("বাড়ি/হোটেল/ধাপ তৈরি") → cha-ching; sent to
+	// jail ("জেলে গেছেন") → sting. Build matching is deliberately specific:
+	// "ঘর তৈরি করেছেন" (room creation) must NOT trigger the build sound.
 	$effect(() => {
 		const logs = gameStore.gameState?.logs;
 		if (!logs) return;
@@ -59,6 +62,12 @@
 		const fresh = logs.slice(seenLogCount);
 		seenLogCount = logs.length;
 		if (fresh.some((l) => l.includes('পাশা ফেলেছেন'))) playDiceRoll();
+		if (fresh.some((l) => l.includes('জোড়া পেয়েছেন'))) playDouble();
+		if (
+			fresh.some((l) => l.includes('বাড়ি তৈরি') || l.includes('হোটেল তৈরি') || l.includes('ধাপ তৈরি'))
+		) {
+			playBuild();
+		}
 		if (fresh.some((l) => l.includes('জেলে গেছেন'))) playJail();
 	});
 

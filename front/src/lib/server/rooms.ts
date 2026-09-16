@@ -212,7 +212,8 @@ export async function applyAction(
 		}
 		case 'BUILD_HOUSE': {
 			const tileId = int(payload['tileId'], -1);
-			buildHouse(room.rs, playerId, tileId);
+			const count = int(payload['count'], 1);
+			buildHouse(room.rs, playerId, tileId, count);
 			autoEndIfNoAction(room.rs, playerId);
 			break;
 		}
