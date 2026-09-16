@@ -177,10 +177,10 @@
 				<section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 					<ActionPanel onselecttile={(id) => (selectedTile = id)} />
 				</section>
-				<CardDecks />
 				<section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 					<PlayerList onselect={(id) => (selectedPlayer = id)} />
 				</section>
+				<CardDecks />
 			</div>
 			{#if gameStore.gameState}
 				<div class="order-3 lg:col-start-1">
