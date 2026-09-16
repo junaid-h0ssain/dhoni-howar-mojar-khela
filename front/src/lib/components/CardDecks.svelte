@@ -43,7 +43,7 @@
 					🎲 ভাগ্য পরীক্ষা <span class="font-normal text-slate-500">({CHANCE_CARDS.length}টি কার্ড)</span>
 				</summary>
 				<ul class="max-h-56 space-y-1 overflow-y-auto px-3 pb-3 text-sm">
-					{#each CHANCE_CARDS as c (c.text)}
+					{#each CHANCE_CARDS as c, i (i)}
 						<li
 							class="flex items-start gap-2 rounded-lg px-2 py-1 {isLastDrawn('CHANCE', c.text)
 								? 'bg-amber-100 font-semibold text-amber-950'
@@ -60,7 +60,7 @@
 					🎁 সুযোগ গ্রহণ <span class="font-normal text-slate-500">({CHEST_CARDS.length}টি কার্ড)</span>
 				</summary>
 				<ul class="max-h-56 space-y-1 overflow-y-auto px-3 pb-3 text-sm">
-					{#each CHEST_CARDS as c (c.text)}
+					{#each CHEST_CARDS as c, i (i)}
 						<li
 							class="flex items-start gap-2 rounded-lg px-2 py-1 {isLastDrawn('CHEST', c.text)
 								? 'bg-amber-100 font-semibold text-amber-950'
