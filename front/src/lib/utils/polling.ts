@@ -13,7 +13,9 @@ const PLAYER_KEY = 'mahajoni.playerId';
 const NAME_KEY = 'mahajoni.playerName';
 const LAST_ROOM_KEY = 'mahajoni.lastRoomId';
 
-const POLL_MS = 2000;
+const POLL_MS_IN_GAME = 2000;
+const POLL_MS_LOBBY = 4000;
+const POLL_MS_FINISHED = 10000;
 
 export interface SavedSession {
 	roomId: string;
@@ -84,6 +86,8 @@ function persistSession(roomId: string, playerId: string, token: string) {
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let currentPollMs = 0;
+let hiddenPaused = false;
 let pollFailures = 0;
 let netListenersAttached = false;
 let stateRequest: Promise<boolean> | null = null;
@@ -94,23 +98,59 @@ export function getReconnectAttempts(): number {
 	return pollFailures;
 }
 
+function pollIntervalFor(): number {
+	const status = gameStore.gameState?.status;
+	if (status === 'IN_GAME') return POLL_MS_IN_GAME;
+	if (status === 'FINISHED') return POLL_MS_FINISHED;
+	return POLL_MS_LOBBY;
+}
+
 function ensureNetListeners() {
 	if (typeof window === 'undefined' || typeof document === 'undefined') return;
 	if (netListenersAttached) return;
 	netListenersAttached = true;
 	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'hidden') {
+			// Mobile background / tab switch: stop the interval so a
+			// hidden page costs 0 Redis reads. Timers are frozen/throttled
+			// on mobile anyway — an explicit stop avoids a burst on return.
+			if (pollTimer) {
+				hiddenPaused = true;
+				stopPolling();
+			}
+			return;
+		}
 		if (document.visibilityState !== 'visible') return;
 		if (!hasSavedSession()) return;
+		// Foreground again: resume at the right cadence + immediate refresh
+		// so the board never shows stale state.
+		hiddenPaused = false;
+		startPolling();
 		void fetchState();
 	});
 	window.addEventListener('online', () => {
 		if (hasSavedSession()) {
+			hiddenPaused = false;
 			startPolling();
 			void fetchState();
 		}
 	});
 	window.addEventListener('offline', () => {
 		gameStore.connection = 'closed';
+		// No network: polling only burns retries + errors. Stop; the
+		// online/visibility handlers restart it.
+		stopPolling();
+	});
+	window.addEventListener('pageshow', (ev) => {
+		// bfcache restore (mobile back-button) drops intervals without
+		// rerunning mount logic — restart polling explicitly.
+		const persisted = (ev as PageTransitionEvent).persisted;
+		if (!persisted) return;
+		if (!hasSavedSession()) return;
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+		hiddenPaused = false;
+		startPolling();
+		void fetchState();
 	});
 }
 
@@ -132,6 +172,7 @@ function applyState(state: GameState, version?: number) {
 			gameStore.sessionToken = saved.sessionToken;
 		}
 	}
+	ensurePollingCadence();
 }
 
 async function fetchState(): Promise<boolean> {
@@ -173,11 +214,38 @@ async function fetchStateOnce(): Promise<boolean> {
 
 function startPolling() {
 	ensureNetListeners();
-	if (pollTimer) return;
+	if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+		// Don't start a timer for a hidden page (mobile background):
+		// it would be throttled anyway. The visibility handler resumes it.
+		hiddenPaused = true;
+		return;
+	}
+	const ms = pollIntervalFor();
+	if (pollTimer) {
+		if (currentPollMs === ms) return;
+		clearInterval(pollTimer);
+		pollTimer = null;
+	}
+	hiddenPaused = false;
+	currentPollMs = ms;
 	gameStore.connection = 'open';
 	pollTimer = setInterval(() => {
 		void fetchState();
-	}, POLL_MS);
+	}, ms);
+}
+
+// After a state change (lobby → game → finished) the cadence may be stale:
+// restart the timer at the new rate without an extra immediate fetch.
+function ensurePollingCadence() {
+	if (!pollTimer || hiddenPaused) return;
+	const ms = pollIntervalFor();
+	if (ms === currentPollMs) return;
+	clearInterval(pollTimer);
+	pollTimer = null;
+	currentPollMs = ms;
+	pollTimer = setInterval(() => {
+		void fetchState();
+	}, ms);
 }
 
 function stopPolling() {
@@ -185,6 +253,7 @@ function stopPolling() {
 		clearInterval(pollTimer);
 		pollTimer = null;
 	}
+	currentPollMs = 0;
 }
 
 function handleServerError(body: { code?: string; message?: string }) {
