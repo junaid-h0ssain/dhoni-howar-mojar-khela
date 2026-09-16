@@ -79,8 +79,7 @@
 	const headerCard = $derived(
 		!headerJailed &&
 		gameStore.gameState?.status === 'IN_GAME' &&
-		gameStore.gameState.lastCard &&
-		gameStore.gameState.lastCard.turnPlayerId === gameStore.gameState.currentTurnPlayerId
+		gameStore.gameState.lastCard
 			? gameStore.gameState.lastCard
 			: undefined
 	);

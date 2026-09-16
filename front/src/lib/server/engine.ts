@@ -190,9 +190,6 @@ function advanceTurn(rs: RoomState): void {
 			s.currentTurnPlayerId = next.id;
 			s.turnPhase = 'ROLL';
 			rs.doublesCount = 0;
-			// The new turn gets a clean center title — a card drawn last
-			// turn must never resurface when play rotates back around.
-			s.lastCard = undefined;
 			return;
 		}
 	}

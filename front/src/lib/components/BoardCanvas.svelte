@@ -323,11 +323,9 @@
 			: undefined;
 		const jailed = !!turnPlayer?.inJail;
 		const lastCard = gs?.lastCard;
-		const showCard =
-			!jailed &&
-			!!lastCard &&
-			gs?.status === 'IN_GAME' &&
-			lastCard.turnPlayerId === gs.currentTurnPlayerId;
+		// Shown until the next player action clears it server-side — even
+		// if the turn auto-passed in the meantime.
+		const showCard = !jailed && !!lastCard && gs?.status === 'IN_GAME';
 		const toneColor =
 			lastCard?.tone === 'good' ? '#16a34a' : lastCard?.tone === 'bad' ? '#dc2626' : '#0f172a';
 		const cardTitle = lastCard?.deck === 'CHANCE' ? 'ভাগ্য পরীক্ষা' : 'সুযোগ গ্রহণ';

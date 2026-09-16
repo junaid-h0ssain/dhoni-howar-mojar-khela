@@ -4,11 +4,7 @@
 
 	const gs = $derived(gameStore.gameState);
 	const lastCard = $derived(
-		gs?.status === 'IN_GAME' &&
-		gs.lastCard &&
-		gs.lastCard.turnPlayerId === gs.currentTurnPlayerId
-			? gs.lastCard
-			: undefined
+		gs?.status === 'IN_GAME' && gs.lastCard ? gs.lastCard : undefined
 	);
 	const toneClass = $derived(
 		lastCard?.tone === 'good'
