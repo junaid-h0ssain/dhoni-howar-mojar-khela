@@ -387,9 +387,32 @@ function ownedByOther(s: GameState, t: Tile | undefined, p: Player): boolean {
 	return !!owner && !owner.isBankrupt;
 }
 
+function cardTone(c: Card): 'good' | 'bad' | 'neutral' {
+	switch (c.kind) {
+		case 'collectEachPlayer':
+		case 'getOutOfJail':
+			return 'good';
+		case 'payEachPlayer':
+		case 'repairs':
+		case 'goToJail':
+			return 'bad';
+		case 'cash':
+			return (c.amount ?? 0) > 0 ? 'good' : (c.amount ?? 0) < 0 ? 'bad' : 'neutral';
+		default:
+			return 'neutral';
+	}
+}
+
 function applyCard(rs: RoomState, p: Player, c: Card, deck: string, diceTotal: number, depth: number): void {
 	const s = rs.state;
 	appendLog(s, `${p.name} (${deck}): ${c.text}`);
+	s.lastCard = {
+		deck: deck === 'ভাগ্য পরীক্ষা' ? 'CHANCE' : 'CHEST',
+		text: c.text,
+		tone: cardTone(c),
+		playerId: p.id,
+		turnPlayerId: s.currentTurnPlayerId
+	};
 	switch (c.kind) {
 		case 'cash': {
 			const amt = c.amount ?? 0;
@@ -662,6 +685,7 @@ export function startGame(rs: RoomState): void {
 	rs.chestDeck = shuffledDeck(CHEST_CARDS.length);
 	rs.chancePos = 0;
 	rs.chestPos = 0;
+	s.lastCard = undefined;
 	appendLog(s, 'খেলা শুরু হয়েছে!');
 }
 

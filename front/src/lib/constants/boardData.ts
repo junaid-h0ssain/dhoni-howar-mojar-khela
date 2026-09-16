@@ -60,9 +60,20 @@ export interface GameState {
 	dice: [number, number];
 	turnPhase: TurnPhase;
 	tiles: Record<number, Tile>;
-	players: Player[];
-	logs: string[];
-	winnerId?: string;
+  players: Player[];
+  logs: string[];
+  winnerId?: string;
+  /** Last drawn Chance/Community card this turn (absent on older snapshots). */
+  lastCard?: {
+    deck: 'CHANCE' | 'CHEST';
+    text: string;
+    tone: 'good' | 'bad' | 'neutral';
+    playerId: string;
+    turnPlayerId: string;
+  };
+  /** Cards left in each pile (computed per response, absent on older snapshots). */
+  chanceRemaining?: number;
+  chestRemaining?: number;
 }
 
 /** Client → server action types (§9). */

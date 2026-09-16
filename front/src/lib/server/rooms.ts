@@ -132,7 +132,14 @@ export function touch(room: Room, playerId: string): void {
 }
 
 export function toClient(room: Room): { state: GameState; version: number } {
-	return { state: room.rs.state, version: room.rs.version };
+	return {
+		state: {
+			...room.rs.state,
+			chanceRemaining: room.rs.chanceDeck.length - room.rs.chancePos,
+			chestRemaining: room.rs.chestDeck.length - room.rs.chestPos
+		},
+		version: room.rs.version
+	};
 }
 
 function bump(room: Room): void {
