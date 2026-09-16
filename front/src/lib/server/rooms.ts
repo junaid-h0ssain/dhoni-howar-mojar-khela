@@ -105,7 +105,22 @@ export async function joinRoom(roomId: string, playerName: string): Promise<{ ro
 		if (s.players.length >= 10) throw new EngineError('ROOM_FULL', 'ঘর পূর্ণ হয়ে গেছে।');
 		const existing = s.players.find((p) => p.name.trim().toLowerCase() === name.toLowerCase());
 		if (existing) {
-			throw new EngineError('NAME_TAKEN', 'এই নামটি ইতিমধ্যে ব্যবহৃত হচ্ছে। পুরনো আসনে ফিরতে আপনার সেশন ব্যবহার করুন।');
+			// Seat reclaim: no session token needed. A player who lost their
+			// token (closed incognito, cleared storage, new device) gets back
+			// on their seat with cash/position/properties intact by joining
+			// with the same name. Trade-off: anyone knowing the room code +
+			// name can sit here — acceptable for a friends game, and the
+			// lobby already advertises this behavior.
+			if (existing.isBankrupt) {
+				throw new EngineError('SEAT_BANKRUPT', 'এই নামের আসনটি দেউলিয়া হয়ে গেছে। অন্য নামে যোগ দিন।');
+			}
+			const token = uid();
+			room.sessions.set(token, existing.id);
+			room.rs.version++;
+			touch(room, existing.id);
+			s.logs.push(`${existing.name} পুনরায় যোগ দিয়েছেন।`);
+			await save(room);
+			return { room, playerId: existing.id, token };
 		}
 		const playerId = uid();
 		const p = addPlayer(room.rs, playerId, name);

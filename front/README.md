@@ -64,7 +64,7 @@ The project is configured for Vercel through `@sveltejs/adapter-vercel`.
 - `POST /api/rooms/:id/action`: submit a validated game action
 - `POST /api/rooms/:id/leave`: leave a room
 
-Sessions are stored in browser local storage for reconnecting. A duplicate player name cannot reclaim a seat; the original browser session is required.
+Sessions are stored in browser local storage for reconnecting. Joining with an existing player name reclaims that seat (cash, position, and properties intact), so a lost token or a new device only costs you a rejoin — at the cost that names, not tokens, guard seats.
 
 ## Important implementation notes
 
