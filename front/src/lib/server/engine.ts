@@ -80,9 +80,9 @@ export function newBoard(): Record<number, Tile> {
 		};
 	}
 	const rails = [
-		{ id: 5, nameBn: 'পাহাড়তলী স্টেশন', nameEn: 'Pahartali Station' },
+		{ id: 5, nameBn: 'ষোলশহর স্টেশন', nameEn: 'Sholoshahar Station' },
 		{ id: 15, nameBn: 'চট্টগ্রাম জংশন', nameEn: 'Chattogram Junction' },
-		{ id: 25, nameBn: 'ষোলশহর স্টেশন', nameEn: 'Sholoshahar Station' },
+		{ id: 25, nameBn: 'পাহাড়তলী স্টেশন', nameEn: 'Pahartali Station' },
 		{ id: 35, nameBn: 'বিমানবন্দর', nameEn: 'Airport' }
 	];
 	for (const r of rails) {

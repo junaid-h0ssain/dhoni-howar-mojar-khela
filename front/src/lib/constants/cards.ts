@@ -22,7 +22,7 @@ export const CHANCE_CARDS: Card[] = [
 	{ text: 'জেলে যান। GO পার হবেন না, ৳200 পাবেন না।', kind: 'goToJail' },
 	{ text: 'সাধারণ মেরামত: প্রতি বাড়ি ৳25, প্রতি হোটেল ৳100।', kind: 'repairs', amount: 25, amount2: 100 },
 	{ text: 'দ্রুত চালানোর জরিমানা: -৳15', kind: 'cash', amount: -15 },
-	{ text: 'পাহাড়তলী স্টেশনে ভ্রমণ করুন। GO পার হলে +৳200', kind: 'moveTo', amount: 5 },
+	{ text: 'পাহাড়তলী স্টেশনে ভ্রমণ করুন। GO পার হলে +৳200', kind: 'moveTo', amount: 25 },
 	{ text: 'বোর্ডের চেয়ারম্যান হলেন! প্রত্যেক খেলোয়াড়কে ৳50 দিন।', kind: 'payEachPlayer', amount: 50 },
 	{ text: 'বিল্ডিং লোন পরিপক্ক হয়েছে। +৳150', kind: 'cash', amount: 150 }
 ];
