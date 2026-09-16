@@ -274,14 +274,17 @@ function handleServerError(body: { code?: string; message?: string }) {
 }
 
 /** Create a room via SvelteKit API and start polling. */
-export async function createRoom(playerName: string): Promise<boolean> {
+export async function createRoom(
+	playerName: string,
+	settings?: { startCash: number; goSalary: number; extremeMode: boolean }
+): Promise<boolean> {
 	gameStore.connection = 'connecting';
 	gameStore.lastError = null;
 	try {
 		const res = await fetch('/api/rooms', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ playerName })
+			body: JSON.stringify({ playerName, settings })
 		});
 		const body = await res.json().catch(() => ({}));
 		if (!res.ok) {

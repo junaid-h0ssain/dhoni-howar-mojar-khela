@@ -3,6 +3,7 @@
 	import { gameStore } from '$lib/stores/gameStore.svelte';
 	import SplitText from '$lib/components/svelte-bits/SplitText.svelte';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
+	import RoomSettings from '$lib/components/RoomSettings.svelte';
 	import {
 		createRoom,
 		joinRoomByCode,
@@ -18,6 +19,10 @@
 	let roomCode = $state('');
 	let saved: SavedSession | null = $state(null);
 	let busy = $state(false);
+	// Room rules for the room we're about to create (host's choice).
+	let startCash = $state(1500);
+	let goSalary = $state(200);
+	let extremeMode = $state(false);
 
 	onMount(() => {
 		saved = loadSavedSession();
@@ -41,7 +46,7 @@
 			savePlayerName(playerName.trim());
 			clearSavedSession();
 			savePlayerName(playerName.trim());
-			await createRoom(playerName.trim());
+			await createRoom(playerName.trim(), { startCash, goSalary, extremeMode });
 		} finally {
 			busy = false;
 		}
@@ -134,6 +139,8 @@
 						placeholder="যেমন: ঝন্টু"
 					/>
 				</label>
+
+				<RoomSettings bind:startCash bind:goSalary bind:extremeMode editable={!busy} />
 
 				<button
 					class="w-full rounded-xl bg-emerald-600 px-4 py-2.5 font-bold text-white transition hover:bg-emerald-500 active:scale-95 disabled:opacity-50"

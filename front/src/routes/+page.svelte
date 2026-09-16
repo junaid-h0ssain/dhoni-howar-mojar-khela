@@ -10,11 +10,16 @@
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 	import { gameStore } from '$lib/stores/gameStore.svelte';
 	import { connect, hasSavedSession, leaveRoom, retryNow, getReconnectAttempts } from '$lib/utils/polling';
+	import { playDiceRoll, playJail, unlockAudio, isMuted, setMuted } from '$lib/utils/sound';
 
 	let selectedTile: number | null = $state(null);
 	let selectedPlayer: string | null = $state(null);
 	let showSoldOut = $state(false);
 	let soldOutSeenFor: string | null = $state(null);
+	let soundMuted = $state(false);
+	// Log watermark: only entries appended after we first see the state can
+	// trigger sounds, so joining mid-game never blasts audio.
+	let seenLogCount = $state(-1);
 
 	function handleLeave() {
 		selectedTile = null;
@@ -28,6 +33,33 @@
 		if (!gameStore.gameState && hasSavedSession()) {
 			connect({ resume: true });
 		}
+		soundMuted = isMuted();
+		// Browsers block audio until a gesture — unlock on first interaction.
+		const unlock = () => unlockAudio();
+		window.addEventListener('pointerdown', unlock, { once: true });
+		window.addEventListener('keydown', unlock, { once: true });
+	});
+
+	function toggleMute() {
+		soundMuted = !soundMuted;
+		setMuted(soundMuted);
+		if (!soundMuted) playDiceRoll();
+	}
+
+	// Game sounds: react to newly appended authoritative log entries.
+	// Dice ("পাশা ফেলেছেন") → rattle; sent to jail ("জেলে গেছেন") → sting.
+	$effect(() => {
+		const logs = gameStore.gameState?.logs;
+		if (!logs) return;
+		if (seenLogCount < 0) {
+			seenLogCount = logs.length;
+			return;
+		}
+		if (logs.length <= seenLogCount) return;
+		const fresh = logs.slice(seenLogCount);
+		seenLogCount = logs.length;
+		if (fresh.some((l) => l.includes('পাশা ফেলেছেন'))) playDiceRoll();
+		if (fresh.some((l) => l.includes('জেলে গেছেন'))) playJail();
 	});
 
 	function copyRoomCode() {
@@ -120,6 +152,13 @@
 				</p>
 			</div>
 			<div class="flex items-center gap-2">
+				<button
+					class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600 transition hover:bg-slate-100 active:scale-95"
+					onclick={toggleMute}
+					title={soundMuted ? 'সাউন্ড চালু করুন' : 'সাউন্ড বন্ধ করুন'}
+				>
+					{soundMuted ? '🔇 নীরব' : '🔊 সাউন্ড'}
+				</button>
 				{#if gameStore.roomCode}
 					<button
 						class="rounded-xl border border-amber-600/30 bg-amber-100 px-3 py-1.5 font-mono text-lg tracking-widest text-amber-900 transition hover:bg-amber-200 active:scale-95"

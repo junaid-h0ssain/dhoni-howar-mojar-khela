@@ -6,13 +6,64 @@
 // Polling has no half-open sockets, so turns only advance on real actions
 // (or explicit leave). isConnected stays true; lastSeen is informational.
 
-import type { GameState, Player, Tile, TileType } from '$lib/constants/boardData';
+import type { GameState, Player, Tile, TileType, GameSettings } from '$lib/constants/boardData';
 import { CHANCE_CARDS, CHEST_CARDS, cardTone, type Card } from '$lib/constants/cards';
 
 export const START_CASH = 1500;
 export const GO_SALARY = 200;
+export const EXTREME_GO_SALARY = 500;
 export const JAIL_FINE = 100;
 export const MAX_JAIL_TURNS = 3;
+
+export const START_CASH_OPTIONS = [1000, 1500, 2000, 3000, 5000];
+export const GO_SALARY_OPTIONS = [100, 200, 300, 500];
+
+export interface GameSettingsInput extends GameSettings {}
+
+export const DEFAULT_SETTINGS: GameSettingsInput = {
+	startCash: START_CASH,
+	goSalary: GO_SALARY,
+	extremeMode: false
+};
+
+/** Clamp host-supplied room rules to sane values (never trust the client). */
+export function sanitizeSettings(input: unknown): GameSettingsInput {
+	const raw = (input ?? {}) as Partial<GameSettingsInput>;
+	let startCash = Number(raw.startCash);
+	let goSalary = Number(raw.goSalary);
+	if (!Number.isFinite(startCash)) startCash = START_CASH;
+	if (!Number.isFinite(goSalary)) goSalary = GO_SALARY;
+	startCash = Math.round(startCash);
+	goSalary = Math.round(goSalary);
+	if (startCash < 500) startCash = 500;
+	if (startCash > 10000) startCash = 10000;
+	if (goSalary < 50) goSalary = 50;
+	if (goSalary > 1000) goSalary = 1000;
+	return { startCash, goSalary, extremeMode: raw.extremeMode === true };
+}
+
+function settingsOf(s: GameState): GameSettingsInput {
+	if (s.settings) return sanitizeSettings(s.settings);
+	return { ...DEFAULT_SETTINGS };
+}
+
+/** Effective GO payout: extreme mode always pays ৳500. */
+export function goSalaryFor(s: GameState): number {
+	const st = settingsOf(s);
+	if (st.extremeMode) return EXTREME_GO_SALARY;
+	return st.goSalary;
+}
+
+// Board TAX tiles that extreme mode doubles: Income Tax (4) and Luxury Tax
+// (38). Card bills, repairs, and fines are never doubled.
+/** Effective tax for a tile: extreme mode doubles only income/luxury tax. */
+export function taxFor(s: GameState, t: Tile): number {
+	const base = t.price ?? 0;
+	if (t.type !== 'TAX') return base;
+	if (t.id !== 4 && t.id !== 38) return base;
+	const st = settingsOf(s);
+	return st.extremeMode ? base * 2 : base;
+}
 
 export const TOKEN_COLORS = [
 	'#22c55e', '#3b82f6', '#ef4444', '#eab308', '#a855f7',
@@ -143,10 +194,11 @@ export interface RoomState {
 	lastSeen: Record<string, number>;
 }
 
-export function newGame(roomId: string, hostId: string): GameState {
+export function newGame(roomId: string, hostId: string, settings?: unknown): GameState {
 	return {
 		roomId, hostId, status: 'LOBBY', currentTurnPlayerId: '',
-		dice: [1, 1], turnPhase: 'ROLL', tiles: newBoard(), players: [], logs: []
+		dice: [1, 1], turnPhase: 'ROLL', tiles: newBoard(), players: [], logs: [],
+		settings: sanitizeSettings(settings)
 	};
 }
 
@@ -325,8 +377,9 @@ function moveCardTo(rs: RoomState, p: Player, target: number): void {
 	const from = p.position;
 	p.position = target % 40;
 	if (p.position < from || p.position === 0) {
-		p.cash += GO_SALARY;
-		appendLog(rs.state, `${p.name} যাত্রা শুরু ঘর পার হয়ে ৳${GO_SALARY} পেয়েছেন।`);
+		const salary = goSalaryFor(rs.state);
+		p.cash += salary;
+		appendLog(rs.state, `${p.name} যাত্রা শুরু ঘর পার হয়ে ৳${salary} পেয়েছেন।`);
 	}
 }
 
@@ -486,8 +539,9 @@ function movePlayer(rs: RoomState, p: Player, steps: number): void {
 	const from = p.position;
 	const to = (from + steps) % 40;
 	if (from + steps >= 40) {
-		p.cash += GO_SALARY;
-		appendLog(rs.state, `${p.name} শুরু ঘর পার হয়ে ৳${GO_SALARY} পেয়েছেন।`);
+		const salary = goSalaryFor(rs.state);
+		p.cash += salary;
+		appendLog(rs.state, `${p.name} শুরু ঘর পার হয়ে ৳${salary} পেয়েছেন।`);
 		p.lapsCompleted = (p.lapsCompleted ?? 0) + 1;
 		if (p.lapsCompleted === 1) {
 			appendLog(rs.state, `🎉 ${p.name} বোর্ডের প্রথম রাউন্ড শেষ করেছেন — এখন সম্পত্তি কিনতে পারবেন!`);
@@ -525,7 +579,7 @@ function resolveLanding(rs: RoomState, p: Player, diceTotal: number, depth: numb
 			sendToJail(rs, p, '');
 			break;
 		case 'TAX': {
-			const tax = t.price ?? 0;
+			const tax = taxFor(s, t);
 			appendLog(s, `${p.name} কর দিয়েছেন ৳${tax}।`);
 			if (!payOrBankrupt(rs, p, tax, 'bank', 'করের')) return;
 			s.turnPhase = 'ACTION';
@@ -581,7 +635,7 @@ export function addPlayer(rs: RoomState, id: string, name: string): Player {
 	if (s.players.length >= 10) throw errEngine('ROOM_FULL', 'ঘর পূর্ণ হয়ে গেছে।');
 	const p: Player = {
 		id, name, tokenColor: TOKEN_COLORS[s.players.length % TOKEN_COLORS.length],
-		cash: START_CASH, position: 0, inJail: false, jailTurns: 0,
+		cash: settingsOf(s).startCash, position: 0, inJail: false, jailTurns: 0,
 		jailCards: 0, isBankrupt: false, isConnected: true, lapsCompleted: 0
 	};
 	s.players.push(p);
@@ -614,10 +668,29 @@ export function removePlayer(rs: RoomState, id: string): Player | undefined {
 	return removed;
 }
 
-export function startGame(rs: RoomState): void {
+export function updateSettings(rs: RoomState, playerId: string, settings: unknown): void {
+	const s = rs.state;
+	if (s.status !== 'LOBBY') throw errEngine('ALREADY_STARTED', 'খেলা শুরু হয়ে গেছে — সেটিংস বদলানো যাবে না।');
+	if (s.hostId !== playerId) throw errEngine('NOT_HOST', 'শুধু হোস্ট সেটিংস বদলাতে পারবেন।');
+	s.settings = sanitizeSettings(settings);
+	const st = s.settings;
+	appendLog(
+		s,
+		`⚙️ হোস্ট সেটিংস বদলেছেন: শুরু ৳${st.startCash}, GO ৳${st.extremeMode ? EXTREME_GO_SALARY : st.goSalary}${st.extremeMode ? ' (এক্সট্রিম 🔥: আয়কর ও বিলাস কর দ্বিগুণ)' : ''}।`
+	);
+}
+
+export function startGame(rs: RoomState, settings?: unknown): void {
 	const s = rs.state;
 	if (s.status !== 'LOBBY') throw errEngine('ALREADY_STARTED', 'খেলা ইতিমধ্যে শুরু হয়েছে।');
 	if (s.players.length < 2) throw errEngine('NOT_ENOUGH_PLAYERS', 'খেলার জন্য কমপক্ষে ২ জন খেলোয়াড় দরকার।');
+	// Late joiners in the lobby may have joined before the host tweaked the
+	// rules — reseat everyone's cash to the final starting amount.
+	if (settings !== undefined) s.settings = sanitizeSettings(settings);
+	const st = settingsOf(s);
+	for (const p of s.players) {
+		if (!p.isBankrupt) p.cash = st.startCash;
+	}
 	s.status = 'IN_GAME';
 	s.currentTurnPlayerId = s.hostId;
 	s.turnPhase = 'ROLL';
@@ -628,6 +701,11 @@ export function startGame(rs: RoomState): void {
 	rs.chestPos = 0;
 	s.lastCard = undefined;
 	appendLog(s, 'খেলা শুরু হয়েছে!');
+	const st2 = settingsOf(s);
+	appendLog(
+		s,
+		`💰 শুরু ৳${st2.startCash} · GO পার হলে ৳${goSalaryFor(s)}${st2.extremeMode ? ' · 🔥 এক্সট্রিম মোড (আয়কর ও বিলাস কর দ্বিগুণ!)' : ''}`
+	);
 }
 
 export function rollDice(rs: RoomState, playerId: string): void {

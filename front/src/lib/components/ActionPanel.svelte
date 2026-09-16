@@ -4,6 +4,7 @@
 	import { diceFace } from '$lib/utils/dice';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 	import UnsoldModal from '$lib/components/UnsoldModal.svelte';
+	import RoomSettings from '$lib/components/RoomSettings.svelte';
 
 	let { onselecttile }: { onselecttile?: (id: number) => void } = $props();
 
@@ -35,6 +36,40 @@
 	// Older servers omit lapsCompleted — only an explicit 0 locks buying.
 	const buyLocked = $derived((gameStore.me?.lapsCompleted ?? 1) < 1);
 
+	// Lobby rules (host-editable). Local mirrors let the host tweak without
+	// fighting the 4s lobby poll; server remains authoritative.
+	let lobbyStartCash = $state(1500);
+	let lobbyGoSalary = $state(200);
+	let lobbyExtreme = $state(false);
+
+	const serverSettings = $derived(gameStore.gameState?.settings);
+
+	$effect(() => {
+		// Adopt server truth whenever we're not the host editing.
+		if (!gameStore.isHost || gameStore.gameState?.status !== 'LOBBY') {
+			if (serverSettings) {
+				lobbyStartCash = serverSettings.startCash;
+				lobbyGoSalary = serverSettings.goSalary;
+				lobbyExtreme = serverSettings.extremeMode;
+			}
+		}
+	});
+
+	function pushSettings(settings: { startCash: number; goSalary: number; extremeMode: boolean }) {
+		lobbyStartCash = settings.startCash;
+		lobbyGoSalary = settings.goSalary;
+		lobbyExtreme = settings.extremeMode;
+		send('UPDATE_SETTINGS', { settings });
+	}
+
+	// In-game rules badge: effective GO payout + extreme flag.
+	const effectiveGo = $derived(
+		gameStore.gameState?.settings?.extremeMode
+			? 500
+			: (gameStore.gameState?.settings?.goSalary ?? 200)
+	);
+	const isExtreme = $derived(gameStore.gameState?.settings?.extremeMode === true);
+
 	$effect(() => {
 		// Default the dropdown to the first buildable tile.
 		if (buildTileId == null && myBuildable.length > 0) {
@@ -61,6 +96,11 @@
 <div>
 	<h2 class="mb-2 text-sm font-semibold tracking-wide text-amber-700">🎯 চাল</h2>
 	{#if gameStore.gameState?.status === 'IN_GAME'}
+		<p class="mb-1 text-center text-[11px] font-medium text-slate-500">
+			💰 শুরু ৳{gameStore.gameState.settings?.startCash ?? 1500} · GO ৳{effectiveGo}{#if isExtreme}
+				<span class="font-bold text-red-600"> · 🔥 এক্সট্রিম</span>
+			{/if}
+		</p>
 		<p class="mb-2 text-center text-3xl tracking-widest" title="সর্বশেষ দান">
 			{diceFace(shownDice[0])}{diceFace(shownDice[1])}
 			<span class="ml-1 align-middle text-sm text-slate-500">= {shownDice[0] + shownDice[1]}</span>
@@ -88,6 +128,14 @@
 		<p class="text-sm text-slate-500">ঘরে যোগ দিন।</p>
 	{:else if gameStore.gameState.status === 'LOBBY'}
 		{#if gameStore.isHost}
+			<RoomSettings
+				startCash={lobbyStartCash}
+				goSalary={lobbyGoSalary}
+				extremeMode={lobbyExtreme}
+				editable={true}
+				onchange={pushSettings}
+			/>
+			<div class="mt-2">
 			<ClickSpark sparkColor="#d97706" sparkCount={10} sparkRadius={24}>
 				<button
 					class="w-full rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-white transition hover:bg-amber-400 active:scale-95"
@@ -96,11 +144,18 @@
 					🚀 খেলা শুরু করুন
 				</button>
 			</ClickSpark>
+			</div>
 			<p class="mt-2 text-center text-xs text-slate-500">
 				সবাই তৈরি? বাজি ধরার সময় এসেছে!
 			</p>
 		{:else}
-			<p class="anim-glow-drift rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm text-slate-600">
+			<RoomSettings
+				startCash={serverSettings?.startCash ?? 1500}
+				goSalary={serverSettings?.goSalary ?? 200}
+				extremeMode={serverSettings?.extremeMode ?? false}
+				editable={false}
+			/>
+			<p class="anim-glow-drift mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm text-slate-600">
 				হোস্ট খেলা শুরু করার অপেক্ষায়… ☕
 			</p>
 		{/if}

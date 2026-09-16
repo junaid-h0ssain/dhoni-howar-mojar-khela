@@ -6,6 +6,7 @@ import {
 	newRoomState, addPlayer, removePlayer, findPlayer,
 	startGame, rollDice, autoEndIfNoAction, buyProperty,
 	buildHouse, endTurn, payJailFine, useJailCard,
+	updateSettings, sanitizeSettings,
 	EngineError, type RoomState
 } from './engine';
 import { kvGet, kvSet, kvSetIfAbsent, kvDel, kvTryLock, kvReleaseLock, type PersistedRoom } from './kv';
@@ -69,7 +70,7 @@ async function generateRoomCode(): Promise<string> {
 	return String(Date.now()).slice(-4);
 }
 
-export async function createRoom(playerName: string): Promise<{ room: Room; playerId: string; token: string }> {
+export async function createRoom(playerName: string, settings?: unknown): Promise<{ room: Room; playerId: string; token: string }> {
 	const name = playerName.trim();
 	if (!name) throw new EngineError('INVALID_NAME', 'আপনার নাম দিন।');
 	if (name.length > 32) throw new EngineError('INVALID_NAME', 'নাম ৩২ অক্ষরের মধ্যে রাখুন।');
@@ -79,6 +80,11 @@ export async function createRoom(playerName: string): Promise<{ room: Room; play
 		const room: Room = { id, rs, sessions: new Map(), createdAt: Date.now() };
 		const playerId = uid();
 		room.rs.state.hostId = playerId;
+		// Host-chosen rules apply before the first seat is dealt, so even the
+		// host starts with the custom cash.
+		if (settings !== undefined) {
+			room.rs.state.settings = sanitizeSettings(settings);
+		}
 		addPlayer(rs, playerId, name);
 		rs.state.logs.push(`${name} ঘর তৈরি করেছেন।`);
 		const token = uid();
@@ -156,7 +162,7 @@ function bump(room: Room): void {
 
 export type ActionType =
 	| 'START_GAME' | 'ROLL_DICE' | 'BUY_PROPERTY' | 'BUILD_HOUSE'
-	| 'END_TURN' | 'PAY_JAIL_FINE' | 'USE_JAIL_CARD';
+	| 'END_TURN' | 'PAY_JAIL_FINE' | 'USE_JAIL_CARD' | 'UPDATE_SETTINGS';
 
 export async function applyAction(
 	roomId: string, token: string, type: ActionType, payload: Record<string, unknown> = {}
@@ -183,7 +189,14 @@ export async function applyAction(
 			if (room.rs.state.hostId !== playerId) {
 				throw new EngineError('NOT_HOST', 'শুধু হোস্ট খেলা শুরু করতে পারবেন।');
 			}
-			startGame(room.rs);
+			startGame(room.rs, payload['settings']);
+			break;
+		}
+		case 'UPDATE_SETTINGS': {
+			if (room.rs.state.hostId !== playerId) {
+				throw new EngineError('NOT_HOST', 'শুধু হোস্ট সেটিংস বদলাতে পারবেন।');
+			}
+			updateSettings(room.rs, playerId, payload['settings']);
 			break;
 		}
 		case 'ROLL_DICE': {
