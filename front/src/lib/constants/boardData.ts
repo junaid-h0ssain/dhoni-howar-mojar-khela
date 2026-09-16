@@ -71,9 +71,6 @@ export interface GameState {
     playerId: string;
     turnPlayerId: string;
   };
-  /** Cards left in each pile (computed per response, absent on older snapshots). */
-  chanceRemaining?: number;
-  chestRemaining?: number;
 }
 
 /** Client → server action types (§9). */
