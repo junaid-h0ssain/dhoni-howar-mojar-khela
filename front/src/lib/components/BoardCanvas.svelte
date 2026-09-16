@@ -314,9 +314,24 @@
 		const centerX = BOARD_SIZE / 2;
 		const centerY = BOARD_SIZE / 2;
 		ctx.textAlign = 'center';
-		ctx.fillStyle = '#0f172a';
+		// Title overrides: a jailed turn player replaces the default title
+		// with bright-red "JAIL!!!" until the turn passes; a freshly drawn
+		// Chance/Community card replaces it with the deck name + card text,
+		// colored green for rewards and red for payments/punishments.
+		const turnPlayer = gs?.status === 'IN_GAME'
+			? gs.players.find((p) => p.id === gs.currentTurnPlayerId)
+			: undefined;
+		const jailed = !!turnPlayer?.inJail;
+		const lastCard = gs?.lastCard;
+		// Shown until the next player action clears it server-side — even
+		// if the turn auto-passed in the meantime.
+		const showCard = !jailed && !!lastCard && gs?.status === 'IN_GAME';
+		const toneColor =
+			lastCard?.tone === 'good' ? '#16a34a' : lastCard?.tone === 'bad' ? '#dc2626' : '#0f172a';
+		const cardTitle = lastCard?.deck === 'CHANCE' ? 'ভাগ্য পরীক্ষা' : 'সুযোগ গ্রহণ';
+		ctx.fillStyle = jailed ? '#dc2626' : showCard ? toneColor : '#0f172a';
 		ctx.font = `bold 40px ${FONT_FAMILY}`;
-		ctx.fillText('ধনী হওয়ার মজার খেলা', centerX, centerY - 72);
+		ctx.fillText(jailed ? 'JAIL!!!' : showCard ? cardTitle : 'ধনী হওয়ার মজার খেলা', centerX, centerY - 72);
 		if (winner) {
 			ctx.font = `bold 52px ${FONT_FAMILY}`;
 			ctx.fillStyle = winner.tokenColor;
@@ -324,6 +339,19 @@
 			ctx.font = `20px ${FONT_FAMILY}`;
 			ctx.fillStyle = '#64748b';
 			ctx.fillText('🏆 বিজয়ী!', centerX, centerY + 28);
+		} else if (showCard && lastCard) {
+			const cardSize = fitFont(ctx, lastCard.text, 26, 440, 'bold');
+			ctx.font = `bold ${cardSize}px ${FONT_FAMILY}`;
+			ctx.fillStyle = toneColor;
+			ctx.fillText(lastCard.text, centerX, centerY - 8, 440);
+			ctx.font = `20px ${FONT_FAMILY}`;
+			ctx.fillStyle = '#64748b';
+			const [d1, d2] = gs.dice;
+			ctx.fillText(
+				`${turnPlayer?.name ?? ''} এর চাল চলছে · ${diceFace(d1)}${diceFace(d2)}`,
+				centerX,
+				centerY + 28
+			);
 		} else if (roller && gs?.status === 'IN_GAME') {
 			ctx.font = `bold 52px ${FONT_FAMILY}`;
 			ctx.fillStyle = roller.tokenColor;

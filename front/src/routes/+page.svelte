@@ -3,8 +3,8 @@
 	import Lobby from '$lib/components/Lobby.svelte';
 	import BoardCanvas from '$lib/components/BoardCanvas.svelte';
 	import ActionPanel from '$lib/components/ActionPanel.svelte';
-	import PlayerList from '$lib/components/PlayerList.svelte';
-	import PropertyModal from '$lib/components/PropertyModal.svelte';
+	import CardDecks from '$lib/components/CardDecks.svelte';
+	import PlayerList from '$lib/components/PlayerList.svelte';	import PropertyModal from '$lib/components/PropertyModal.svelte';
 	import PlayerModal from '$lib/components/PlayerModal.svelte';
 	import SoldOutModal from '$lib/components/SoldOutModal.svelte';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
@@ -65,6 +65,40 @@
 		showSoldOut = false;
 		soldOutSeenFor = gameStore.gameState?.roomId ?? soldOutSeenFor;
 	}
+	// Header title overrides mirror the board center: a jailed turn player
+	// shows bright-red "JAIL!!!" until the turn passes; a freshly drawn card
+	// shows the deck name, green for rewards and red for payments/punishments.
+	const headerTurnPlayer = $derived(
+		gameStore.gameState?.status === 'IN_GAME'
+			? gameStore.gameState.players.find(
+					(p) => p.id === gameStore.gameState?.currentTurnPlayerId
+				)
+			: undefined
+	);
+	const headerJailed = $derived(!!headerTurnPlayer?.inJail);
+	const headerCard = $derived(
+		!headerJailed &&
+		gameStore.gameState?.status === 'IN_GAME' &&
+		gameStore.gameState.lastCard
+			? gameStore.gameState.lastCard
+			: undefined
+	);
+	const headerTitle = $derived(
+		headerJailed
+			? 'JAIL!!!'
+			: headerCard
+				? headerCard.deck === 'CHANCE'
+					? 'ভাগ্য পরীক্ষা'
+					: 'সুযোগ গ্রহণ'
+				: 'ধনী হওয়ার মজার খেলা'
+	);
+	const headerTitleClass = $derived(
+		headerJailed || headerCard?.tone === 'bad'
+			? 'text-red-600'
+			: headerCard?.tone === 'good'
+				? 'text-emerald-600'
+				: 'text-emerald-950'
+	);
 </script>
 
 <!-- Flat off-white backdrop -->
@@ -78,7 +112,7 @@
 	{:else}
 		<header class="mx-auto mb-4 flex max-w-6xl flex-wrap items-center justify-between gap-3">
 			<div>
-				<h1 class="text-2xl font-bold text-emerald-950 sm:text-3xl">ধনী হওয়ার মজার খেলা</h1>
+				<h1 class="text-2xl font-bold sm:text-3xl {headerTitleClass}">{headerTitle}</h1>
 				<p class="mt-0.5 text-xs text-emerald-800/70">
 					{gameStore.currentPlayer?.name
 						? `${gameStore.currentPlayer.name} এর চাল চলছে…`
@@ -145,6 +179,7 @@
 				<section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 					<PlayerList onselect={(id) => (selectedPlayer = id)} />
 				</section>
+				<CardDecks />
 			</div>
 			{#if gameStore.gameState}
 				<div class="order-3 lg:col-start-1">

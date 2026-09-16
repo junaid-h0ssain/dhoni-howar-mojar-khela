@@ -157,6 +157,12 @@ export async function applyAction(
 			throw new EngineError('GAME_FINISHED', 'খেলা শেষ হয়ে গেছে।');
 		}
 		touch(room, playerId);
+		// A new player action supersedes any previously drawn card display:
+		// the board center only shows the card until the next action.
+		// (A card drawn by this very action re-sets it inside the engine.
+		// Automatic turn passes do NOT clear it, so the result stays
+		// visible until someone acts.)
+		room.rs.state.lastCard = undefined;
 		switch (type) {
 		case 'START_GAME': {
 			if (room.rs.state.hostId !== playerId) {

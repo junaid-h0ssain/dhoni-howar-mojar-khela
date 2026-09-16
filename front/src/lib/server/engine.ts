@@ -7,6 +7,7 @@
 // (or explicit leave). isConnected stays true; lastSeen is informational.
 
 import type { GameState, Player, Tile, TileType } from '$lib/constants/boardData';
+import { CHANCE_CARDS, CHEST_CARDS, cardTone, type Card } from '$lib/constants/cards';
 
 export const START_CASH = 1500;
 export const GO_SALARY = 200;
@@ -79,9 +80,9 @@ export function newBoard(): Record<number, Tile> {
 		};
 	}
 	const rails = [
-		{ id: 5, nameBn: 'পাহাড়তলী স্টেশন', nameEn: 'Pahartali Station' },
+		{ id: 5, nameBn: 'ষোলশহর স্টেশন', nameEn: 'Sholoshahar Station' },
 		{ id: 15, nameBn: 'চট্টগ্রাম জংশন', nameEn: 'Chattogram Junction' },
-		{ id: 25, nameBn: 'ষোলশহর স্টেশন', nameEn: 'Sholoshahar Station' },
+		{ id: 25, nameBn: 'পাহাড়তলী স্টেশন', nameEn: 'Pahartali Station' },
 		{ id: 35, nameBn: 'বিমানবন্দর', nameEn: 'Airport' }
 	];
 	for (const r of rails) {
@@ -120,51 +121,7 @@ export function newBoard(): Record<number, Tile> {
 	return tiles;
 }
 
-// --- Cards (port of cards.go) ---
-
-type CardKind =
-	| 'cash' | 'moveTo' | 'goToJail' | 'moveBack' | 'getOutOfJail'
-	| 'nearestRailroad' | 'nearestUtility' | 'repairs' | 'payEachPlayer' | 'collectEachPlayer';
-
-interface Card { text: string; kind: CardKind; amount?: number; amount2?: number }
-
-const CHANCE_CARDS: Card[] = [
-	{ text: 'যাত্রা শুরুর ঘরে এগিয়ে যান। +৳200', kind: 'moveTo', amount: 0 },
-	{ text: 'দেওয়ানহাট যান। GO পার হলে +৳200', kind: 'moveTo', amount: 24 },
-	{ text: 'পাঁচলাইশ যান।', kind: 'moveTo', amount: 39 },
-	{ text: 'রাউজান যান। GO পার হলে +৳200', kind: 'moveTo', amount: 11 },
-	{ text: 'নিকটতম স্টেশনে যান। কেনা না হলে কিনতে পারবেন, নইলে দ্বিগুণ ভাড়া।', kind: 'nearestRailroad' },
-	{ text: 'নিকটতম স্টেশনে যান। কেনা না হলে কিনতে পারবেন, নইলে দ্বিগুণ ভাড়া।', kind: 'nearestRailroad' },
-	{ text: 'নিকটতম ইউটিলিটিতে যান। মালিক থাকলে পাশা ফেলে ১০ গুণ ভাড়া দিন।', kind: 'nearestUtility' },
-	{ text: 'ব্যাংক লভ্যাংশ দিল: +৳50', kind: 'cash', amount: 50 },
-	{ text: 'জেল থেকে মুক্তির কার্ড পেলেন! জেলে গেলে ব্যবহার করুন।', kind: 'getOutOfJail' },
-	{ text: '৩ ঘর পিছিয়ে যান।', kind: 'moveBack', amount: 3 },
-	{ text: 'জেলে যান। GO পার হবেন না, ৳200 পাবেন না।', kind: 'goToJail' },
-	{ text: 'সাধারণ মেরামত: প্রতি বাড়ি ৳25, প্রতি হোটেল ৳100।', kind: 'repairs', amount: 25, amount2: 100 },
-	{ text: 'দ্রুত চালানোর জরিমানা: -৳15', kind: 'cash', amount: -15 },
-	{ text: 'পাহাড়তলী স্টেশনে ভ্রমণ করুন। GO পার হলে +৳200', kind: 'moveTo', amount: 5 },
-	{ text: 'বোর্ডের চেয়ারম্যান হলেন! প্রত্যেক খেলোয়াড়কে ৳50 দিন।', kind: 'payEachPlayer', amount: 50 },
-	{ text: 'বিল্ডিং লোন পরিপক্ক হয়েছে। +৳150', kind: 'cash', amount: 150 }
-];
-
-const CHEST_CARDS: Card[] = [
-	{ text: 'যাত্রা শুরুর ঘরে এগিয়ে যান। +৳200', kind: 'moveTo', amount: 0 },
-	{ text: 'ব্যাংকের ভুলে +৳200 পেলেন।', kind: 'cash', amount: 200 },
-	{ text: 'ডাক্তারের ফি -৳50।', kind: 'cash', amount: -50 },
-	{ text: 'শেয়ার বিক্রি করে +৳50 পেলেন।', kind: 'cash', amount: 50 },
-	{ text: 'জেল থেকে মুক্তির কার্ড পেলেন! জেলে গেলে ব্যবহার করুন।', kind: 'getOutOfJail' },
-	{ text: 'জেলে যান। GO পার হবেন না, ৳200 পাবেন না।', kind: 'goToJail' },
-	{ text: 'ছুটির তহবিল +৳100।', kind: 'cash', amount: 100 },
-	{ text: 'আয়কর ফেরত +৳20।', kind: 'cash', amount: 20 },
-	{ text: 'আপনার জন্মদিন! প্রত্যেক খেলোয়াড়ের কাছ থেকে ৳10 নিন।', kind: 'collectEachPlayer', amount: 10 },
-	{ text: 'জীবনবিমা পরিপক্ক +৳100।', kind: 'cash', amount: 100 },
-	{ text: 'হাসপাতালের বিল -৳100।', kind: 'cash', amount: -100 },
-	{ text: 'স্কুল ফি -৳50।', kind: 'cash', amount: -50 },
-	{ text: 'পরামর্শ ফি +৳25 পেলেন।', kind: 'cash', amount: 25 },
-	{ text: 'রাস্তা মেরামত: প্রতি বাড়ি ৳40, প্রতি হোটেল ৳115।', kind: 'repairs', amount: 40, amount2: 115 },
-	{ text: 'সুন্দরী প্রতিযোগিতায় দ্বিতীয় পুরস্কার +৳10।', kind: 'cash', amount: 10 },
-	{ text: 'উত্তরাধিকার সূত্রে +৳100 পেলেন।', kind: 'cash', amount: 100 }
-];
+// --- Cards (definitions live in $lib/constants/cards.ts) ---
 
 function shuffledDeck(n: number): number[] {
 	const d = Array.from({ length: n }, (_, i) => i);
@@ -390,6 +347,13 @@ function ownedByOther(s: GameState, t: Tile | undefined, p: Player): boolean {
 function applyCard(rs: RoomState, p: Player, c: Card, deck: string, diceTotal: number, depth: number): void {
 	const s = rs.state;
 	appendLog(s, `${p.name} (${deck}): ${c.text}`);
+	s.lastCard = {
+		deck: deck === 'ভাগ্য পরীক্ষা' ? 'CHANCE' : 'CHEST',
+		text: c.text,
+		tone: cardTone(c),
+		playerId: p.id,
+		turnPlayerId: s.currentTurnPlayerId
+	};
 	switch (c.kind) {
 		case 'cash': {
 			const amt = c.amount ?? 0;
@@ -662,6 +626,7 @@ export function startGame(rs: RoomState): void {
 	rs.chestDeck = shuffledDeck(CHEST_CARDS.length);
 	rs.chancePos = 0;
 	rs.chestPos = 0;
+	s.lastCard = undefined;
 	appendLog(s, 'খেলা শুরু হয়েছে!');
 }
 
