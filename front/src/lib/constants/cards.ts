@@ -9,7 +9,7 @@ export type CardKind =
 export interface Card { text: string; kind: CardKind; amount?: number; amount2?: number }
 
 export const CHANCE_CARDS: Card[] = [
-	{ text: 'যাত্রা শুরুর ঘরে এগিয়ে যান। +৳200', kind: 'moveTo', amount: 0 },
+	{ text: 'যাত্রা শুরুর ঘরে এগিয়ে যান। +৳200', kind: 'collectEachPlayer', amount: 0 },
 	{ text: 'দেওয়ানহাট যান। GO পার হলে +৳200', kind: 'moveTo', amount: 24 },
 	{ text: 'পাঁচলাইশ যান।', kind: 'moveTo', amount: 39 },
 	{ text: 'রাউজান যান। GO পার হলে +৳200', kind: 'moveTo', amount: 11 },
@@ -28,7 +28,7 @@ export const CHANCE_CARDS: Card[] = [
 ];
 
 export const CHEST_CARDS: Card[] = [
-	{ text: 'যাত্রা শুরুর ঘরে এগিয়ে যান। +৳200', kind: 'moveTo', amount: 0 },
+	{ text: 'যাত্রা শুরুর ঘরে এগিয়ে যান। +৳200', kind: 'collectEachPlayer', amount: 0 },
 	{ text: 'ব্যাংকের ভুলে +৳200 পেলেন।', kind: 'cash', amount: 200 },
 	{ text: 'ডাক্তারের ফি -৳50।', kind: 'cash', amount: -50 },
 	{ text: 'শেয়ার বিক্রি করে +৳50 পেলেন।', kind: 'cash', amount: 50 },
@@ -49,11 +49,14 @@ export const CHEST_CARDS: Card[] = [
 /** Green for rewards, red for payments/punishments, slate otherwise. */
 export function cardTone(c: Card): 'good' | 'bad' | 'neutral' {
 	switch (c.kind) {
-		case 'collectEachPlayer':
+    case 'collectEachPlayer':
+      return 'good';
 		case 'getOutOfJail':
 			return 'good';
-		case 'payEachPlayer':
-		case 'repairs':
+    case 'payEachPlayer':
+      return 'bad';
+    case 'repairs':
+      return 'bad';
 		case 'goToJail':
 			return 'bad';
 		case 'cash':
