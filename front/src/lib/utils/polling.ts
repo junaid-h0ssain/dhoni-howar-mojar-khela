@@ -91,7 +91,12 @@ let hiddenPaused = false;
 let pollFailures = 0;
 let netListenersAttached = false;
 let stateRequest: Promise<boolean> | null = null;
-let actionRequest: Promise<void> | null = null;
+// Action queue: rapid clicks (e.g. buying houses back-to-back) must be sent
+// one after another, never coalesced. The old single-flight guard returned
+// the in-flight promise and silently dropped the new payload, so fast
+// clicks looked dead.
+let actionQueue: Promise<void> = Promise.resolve();
+let pendingActions = 0;
 let latestStateVersion = -1;
 
 export function getReconnectAttempts(): number {
@@ -274,14 +279,17 @@ function handleServerError(body: { code?: string; message?: string }) {
 }
 
 /** Create a room via SvelteKit API and start polling. */
-export async function createRoom(playerName: string): Promise<boolean> {
+export async function createRoom(
+	playerName: string,
+	settings?: { startCash: number; goSalary: number; extremeMode: boolean }
+): Promise<boolean> {
 	gameStore.connection = 'connecting';
 	gameStore.lastError = null;
 	try {
 		const res = await fetch('/api/rooms', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ playerName })
+			body: JSON.stringify({ playerName, settings })
 		});
 		const body = await res.json().catch(() => ({}));
 		if (!res.ok) {
@@ -387,15 +395,20 @@ export function retryNow(): void {
 	void fetchState();
 }
 
-/** Send a game action (ROLL_DICE, BUY_PROPERTY, …) via POST. */
-export async function send(type: string, payload: Record<string, unknown> = {}): Promise<void> {
-	if (actionRequest) return actionRequest;
-	actionRequest = sendOnce(type, payload);
-	try {
-		await actionRequest;
-	} finally {
-		actionRequest = null;
-	}
+/** Send a game action (ROLL_DICE, BUY_PROPERTY, …) via POST.
+ * Calls are queued and sent sequentially so rapid clicks each execute. */
+export function send(type: string, payload: Record<string, unknown> = {}): Promise<void> {
+	pendingActions++;
+	const run = actionQueue.then(() => sendOnce(type, payload));
+	actionQueue = run.catch(() => {}).finally(() => {
+		pendingActions--;
+	});
+	return run;
+}
+
+/** True while an action POST is in flight or queued (for button spinners). */
+export function actionsPending(): boolean {
+	return pendingActions > 0;
 }
 
 async function sendOnce(type: string, payload: Record<string, unknown> = {}): Promise<void> {

@@ -52,6 +52,15 @@ export interface Player {
 export type GameStatus = 'LOBBY' | 'IN_GAME' | 'FINISHED';
 export type TurnPhase = 'ROLL' | 'ACTION' | 'END_TURN';
 
+export interface GameSettings {
+	/** Cash each player starts with. */
+	startCash: number;
+	/** Cash awarded for passing GO (ignored when extremeMode is on). */
+	goSalary: number;
+	/** Extreme mode: GO pays ৳500, income tax & luxury tax cost double. */
+	extremeMode: boolean;
+}
+
 export interface GameState {
 	roomId: string;
 	hostId: string;
@@ -63,6 +72,8 @@ export interface GameState {
   players: Player[];
   logs: string[];
   winnerId?: string;
+  /** Room rules chosen by the host in the lobby. Absent on older snapshots. */
+  settings?: GameSettings;
   /** Last drawn Chance/Community card this turn (absent on older snapshots). */
   lastCard?: {
     deck: 'CHANCE' | 'CHEST';

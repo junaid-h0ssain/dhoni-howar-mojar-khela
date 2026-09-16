@@ -4,10 +4,13 @@
 	import { diceFace } from '$lib/utils/dice';
 	import ClickSpark from '$lib/components/svelte-bits/ClickSpark.svelte';
 	import UnsoldModal from '$lib/components/UnsoldModal.svelte';
+	import RoomSettings from '$lib/components/RoomSettings.svelte';
 
 	let { onselecttile }: { onselecttile?: (id: number) => void } = $props();
 
 	let buildTileId = $state<number | null>(null);
+	let buildCount = $state(1);
+	let building = $state(false);
 	let showUnsold = $state(false);
 
 	const tilesList = $derived(
@@ -32,8 +35,92 @@
 	const buildLabel = $derived(
 		!buildTile ? '' : buildTile.houses >= 4 ? 'হোটেল তৈরি করুন' : 'বাড়ি তৈরি করুন'
 	);
+	// Group this build belongs to: bulk builds spread evenly across the
+	// player's owned tiles here (server distributes lowest-first).
+	const buildGroup = $derived(
+		!buildTile
+			? []
+			: tilesList.filter(
+					(t) =>
+						t.type === 'PROPERTY' &&
+						t.group === buildTile.group &&
+						t.ownerId === gameStore.playerId
+				)
+	);
+	const groupHeadroom = $derived(buildGroup.reduce((a, t) => a + Math.max(0, 5 - t.houses), 0));
+	// Client-side preview of an even bulk build: mirror the server's
+	// lowest-first distribution to show real cost & per-tile result.
+	const buildPreview = $derived.by(() => {
+		if (!buildTile || buildGroup.length === 0) return { levels: 0, cost: 0, per: [] as { id: number; name: string; add: number; to: number }[] };
+		const levels = buildGroup.map((t) => ({ id: t.id, name: t.nameBn, houses: t.houses, cost: t.houseCost ?? 0 }));
+		let cash = gameStore.me?.cash ?? 0;
+		let cost = 0;
+		let n = 0;
+		const want = Math.max(1, Math.min(25, Math.floor(buildCount) || 1));
+		for (let i = 0; i < want; i++) {
+			const open = levels.filter((l) => l.houses < 5);
+			if (open.length === 0) break;
+			open.sort((a, b) => a.houses - b.houses || (a.id === buildTile.id ? -1 : b.id === buildTile.id ? 1 : a.id - b.id));
+			const target = open[0];
+			if (cash < target.cost) break;
+			cash -= target.cost;
+			cost += target.cost;
+			target.houses++;
+			n++;
+		}
+		const per = levels
+			.filter((l) => {
+				const before = buildGroup.find((t) => t.id === l.id)?.houses ?? 0;
+				return l.houses > before;
+			})
+			.map((l) => {
+				const before = buildGroup.find((t) => t.id === l.id)?.houses ?? 0;
+				return { id: l.id, name: l.name, add: l.houses - before, to: l.houses };
+			});
+		return { levels: n, cost, per };
+	});
+	const buildCapped = $derived(Math.min(Math.max(1, Math.floor(buildCount) || 1), Math.max(1, groupHeadroom)));
+	const previewShort = $derived(
+		buildGroup.length <= 1 || buildPreview.levels <= 1
+			? ''
+			: ` → ${buildPreview.per.map((p) => `${p.name} +${p.add}`).join(', ')}`
+	);
 	// Older servers omit lapsCompleted — only an explicit 0 locks buying.
 	const buyLocked = $derived((gameStore.me?.lapsCompleted ?? 1) < 1);
+
+	// Lobby rules (host-editable). Local mirrors let the host tweak without
+	// fighting the 4s lobby poll; server remains authoritative.
+	let lobbyStartCash = $state(1500);
+	let lobbyGoSalary = $state(200);
+	let lobbyExtreme = $state(false);
+
+	const serverSettings = $derived(gameStore.gameState?.settings);
+
+	$effect(() => {
+		// Adopt server truth whenever we're not the host editing.
+		if (!gameStore.isHost || gameStore.gameState?.status !== 'LOBBY') {
+			if (serverSettings) {
+				lobbyStartCash = serverSettings.startCash;
+				lobbyGoSalary = serverSettings.goSalary;
+				lobbyExtreme = serverSettings.extremeMode;
+			}
+		}
+	});
+
+	function pushSettings(settings: { startCash: number; goSalary: number; extremeMode: boolean }) {
+		lobbyStartCash = settings.startCash;
+		lobbyGoSalary = settings.goSalary;
+		lobbyExtreme = settings.extremeMode;
+		send('UPDATE_SETTINGS', { settings });
+	}
+
+	// In-game rules badge: effective GO payout + extreme flag.
+	const effectiveGo = $derived(
+		gameStore.gameState?.settings?.extremeMode
+			? 500
+			: (gameStore.gameState?.settings?.goSalary ?? 200)
+	);
+	const isExtreme = $derived(gameStore.gameState?.settings?.extremeMode === true);
 
 	$effect(() => {
 		// Default the dropdown to the first buildable tile.
@@ -43,7 +130,21 @@
 		if (buildTileId != null && !myBuildable.some((t) => t.id === buildTileId)) {
 			buildTileId = myBuildable.length > 0 ? myBuildable[0].id : null;
 		}
+		// Keep the bulk quantity within the group's remaining headroom.
+		if (groupHeadroom > 0 && buildCount > groupHeadroom) buildCount = groupHeadroom;
+		if (buildCount < 1) buildCount = 1;
 	});
+
+	async function buildMany() {
+		if (buildTileId == null || building) return;
+		const n = Math.min(Math.max(1, Math.floor(buildCount) || 1), 25);
+		building = true;
+		try {
+			await send('BUILD_HOUSE', { tileId: buildTileId, count: n });
+		} finally {
+			building = false;
+		}
+	}
 
 	function levelLabel(houses: number): string {
 		if (houses >= 5) return 'হোটেল';
@@ -61,6 +162,11 @@
 <div>
 	<h2 class="mb-2 text-sm font-semibold tracking-wide text-amber-700">🎯 চাল</h2>
 	{#if gameStore.gameState?.status === 'IN_GAME'}
+		<p class="mb-1 text-center text-[11px] font-medium text-slate-500">
+			💰 শুরু ৳{gameStore.gameState.settings?.startCash ?? 1500} · GO ৳{effectiveGo}{#if isExtreme}
+				<span class="font-bold text-red-600"> · 🔥 এক্সট্রিম</span>
+			{/if}
+		</p>
 		<p class="mb-2 text-center text-3xl tracking-widest" title="সর্বশেষ দান">
 			{diceFace(shownDice[0])}{diceFace(shownDice[1])}
 			<span class="ml-1 align-middle text-sm text-slate-500">= {shownDice[0] + shownDice[1]}</span>
@@ -88,6 +194,14 @@
 		<p class="text-sm text-slate-500">ঘরে যোগ দিন।</p>
 	{:else if gameStore.gameState.status === 'LOBBY'}
 		{#if gameStore.isHost}
+			<RoomSettings
+				startCash={lobbyStartCash}
+				goSalary={lobbyGoSalary}
+				extremeMode={lobbyExtreme}
+				editable={true}
+				onchange={pushSettings}
+			/>
+			<div class="mt-2">
 			<ClickSpark sparkColor="#d97706" sparkCount={10} sparkRadius={24}>
 				<button
 					class="w-full rounded-xl bg-amber-500 px-4 py-2.5 font-bold text-white transition hover:bg-amber-400 active:scale-95"
@@ -96,11 +210,18 @@
 					🚀 খেলা শুরু করুন
 				</button>
 			</ClickSpark>
+			</div>
 			<p class="mt-2 text-center text-xs text-slate-500">
 				সবাই তৈরি? বাজি ধরার সময় এসেছে!
 			</p>
 		{:else}
-			<p class="anim-glow-drift rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm text-slate-600">
+			<RoomSettings
+				startCash={serverSettings?.startCash ?? 1500}
+				goSalary={serverSettings?.goSalary ?? 200}
+				extremeMode={serverSettings?.extremeMode ?? false}
+				editable={false}
+			/>
+			<p class="anim-glow-drift mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm text-slate-600">
 				হোস্ট খেলা শুরু করার অপেক্ষায়… ☕
 			</p>
 		{/if}
@@ -173,7 +294,7 @@
 			{:else}
 				<div class="rounded-xl border border-purple-300 bg-purple-50 p-2">
 					<p class="mb-1 text-xs font-medium text-purple-800">
-						🏠 বাড়ি → হোটেল (সর্বোচ্চ: ৪ বাড়ি, তারপর হোটেল)
+						🏠 বাড়ি → হোটেল (গ্রুপে সমানভাবে বণ্টন হয়)
 					</p>
 					<select
 						class="mb-2 w-full rounded-lg border border-purple-300 bg-white px-2 py-1.5 text-sm text-slate-900"
@@ -185,15 +306,70 @@
 							</option>
 						{/each}
 					</select>
+					{#if buildGroup.length > 1}
+						<p class="mb-2 text-[11px] leading-relaxed text-purple-900/80">
+							{buildTile?.group} গ্রুপ: {buildGroup
+								.map((t) => `${t.nameBn} ${levelLabel(t.houses)}`)
+								.join(' · ')}
+						</p>
+					{/if}
+					<div class="mb-2 flex items-center gap-2">
+						<span class="text-xs font-medium text-purple-800">পরিমাণ:</span>
+						<div class="flex items-center rounded-lg border border-purple-300 bg-white">
+							<button
+								class="px-2.5 py-1 text-base font-bold text-purple-700 transition hover:bg-purple-100 active:scale-95 disabled:opacity-40"
+								disabled={building || buildCapped <= 1}
+								onclick={() => (buildCount = Math.max(1, buildCapped - 1))}
+								aria-label="কমান"
+							>
+								−
+							</button>
+							<span class="min-w-8 text-center text-sm font-bold text-slate-900">{buildCapped}</span>
+							<button
+								class="px-2.5 py-1 text-base font-bold text-purple-700 transition hover:bg-purple-100 active:scale-95 disabled:opacity-40"
+								disabled={building || buildCapped >= Math.max(1, groupHeadroom)}
+								onclick={() => (buildCount = Math.min(Math.max(1, groupHeadroom), buildCapped + 1))}
+								aria-label="বাড়ান"
+							>
+								+
+							</button>
+						</div>
+						<div class="flex gap-1">
+							{#each [1, 3, 5] as q}
+								<button
+									class="rounded-lg border px-2 py-1 text-xs font-bold transition active:scale-95 disabled:opacity-40 {buildCapped === Math.min(q, Math.max(1, groupHeadroom)) ? 'border-purple-600 bg-purple-600 text-white' : 'border-purple-300 bg-white text-purple-700 hover:bg-purple-100'}"
+									disabled={building || q > Math.max(1, groupHeadroom)}
+									onclick={() => (buildCount = Math.min(q, Math.max(1, groupHeadroom)))}
+								>
+									×{q}
+								</button>
+							{/each}
+							<button
+								class="rounded-lg border px-2 py-1 text-xs font-bold transition active:scale-95 disabled:opacity-40 {buildCapped === Math.max(1, groupHeadroom) ? 'border-purple-600 bg-purple-600 text-white' : 'border-purple-300 bg-white text-purple-700 hover:bg-purple-100'}"
+								disabled={building || groupHeadroom < 1}
+								onclick={() => (buildCount = Math.max(1, groupHeadroom))}
+								title="গ্রুপের সব খালি ধাপ একবারে"
+							>
+								MAX
+							</button>
+						</div>
+					</div>
 					<button
 						class="w-full rounded-xl bg-purple-600 px-4 py-2 font-bold text-white transition hover:bg-purple-500 active:scale-95 disabled:opacity-50"
-						disabled={buildTileId == null}
-						onclick={() => {
-							if (buildTileId != null) send('BUILD_HOUSE', { tileId: buildTileId });
-						}}
+						disabled={building || buildTileId == null || buildPreview.levels === 0}
+						onclick={buildMany}
 					>
-						{buildLabel || 'বাড়ি তৈরি করুন'} {buildTile ? `(৳${buildTile.houseCost})` : ''}
+						{#if building}
+							<span class="inline-block animate-spin align-middle">⏳</span> তৈরি হচ্ছে…
+						{:else if buildCapped > 1}
+							{buildPreview.levels}টি ধাপ তৈরি করুন (৳{buildPreview.cost}){previewShort}
+						{:else}
+							{buildLabel || 'বাড়ি তৈরি করুন'} {buildTile ? `(৳${buildTile.houseCost})` : ''}
+						{/if}
 					</button>
+					{#if gameStore.lastError}
+						<p class="mt-1 text-center text-[11px] font-medium text-red-600">{gameStore.lastError}</p>
+					{/if}
 				</div>
 			{/if}
 			<button

@@ -7,7 +7,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const body = await request.json().catch(() => ({}));
 		const playerName = String(body?.playerName ?? '');
-		const { room, playerId, token } = await createRoom(playerName);
+		const { room, playerId, token } = await createRoom(playerName, body?.settings);
 		const { state, version } = toClient(room);
 		return json({ roomId: room.id, playerId, sessionToken: token, state, version });
 	} catch (e) {
