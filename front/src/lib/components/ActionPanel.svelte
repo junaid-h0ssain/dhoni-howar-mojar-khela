@@ -9,7 +9,9 @@
 	let { onselecttile }: { onselecttile?: (id: number) => void } = $props();
 
 	let buildTileId = $state<number | null>(null);
-	let buildCount = $state(1);
+	// Target level on the selected tile only: 1–4 = houses, 5 = hotel.
+	let buildTarget: number | null = $state(null);
+	let lastBuildTile = $state<number | null>(null);
 	let building = $state(false);
 	let showUnsold = $state(false);
 
@@ -32,58 +34,22 @@
 		)
 	);
 	const buildTile = $derived(tilesList.find((t) => t.id === buildTileId));
-	const buildLabel = $derived(
-		!buildTile ? '' : buildTile.houses >= 4 ? 'হোটেল তৈরি করুন' : 'বাড়ি তৈরি করুন'
-	);
-	// Group this build belongs to: bulk builds spread evenly across the
-	// player's owned tiles here (server distributes lowest-first).
-	const buildGroup = $derived(
-		!buildTile
-			? []
-			: tilesList.filter(
-					(t) =>
-						t.type === 'PROPERTY' &&
-						t.group === buildTile.group &&
-						t.ownerId === gameStore.playerId
-				)
-	);
-	const groupHeadroom = $derived(buildGroup.reduce((a, t) => a + Math.max(0, 5 - t.houses), 0));
-	// Client-side preview of an even bulk build: mirror the server's
-	// lowest-first distribution to show real cost & per-tile result.
-	const buildPreview = $derived.by(() => {
-		if (!buildTile || buildGroup.length === 0) return { levels: 0, cost: 0, per: [] as { id: number; name: string; add: number; to: number }[] };
-		const levels = buildGroup.map((t) => ({ id: t.id, name: t.nameBn, houses: t.houses, cost: t.houseCost ?? 0 }));
-		let cash = gameStore.me?.cash ?? 0;
-		let cost = 0;
-		let n = 0;
-		const want = Math.max(1, Math.min(25, Math.floor(buildCount) || 1));
-		for (let i = 0; i < want; i++) {
-			const open = levels.filter((l) => l.houses < 5);
-			if (open.length === 0) break;
-			open.sort((a, b) => a.houses - b.houses || (a.id === buildTile.id ? -1 : b.id === buildTile.id ? 1 : a.id - b.id));
-			const target = open[0];
-			if (cash < target.cost) break;
-			cash -= target.cost;
-			cost += target.cost;
-			target.houses++;
-			n++;
-		}
-		const per = levels
-			.filter((l) => {
-				const before = buildGroup.find((t) => t.id === l.id)?.houses ?? 0;
-				return l.houses > before;
-			})
-			.map((l) => {
-				const before = buildGroup.find((t) => t.id === l.id)?.houses ?? 0;
-				return { id: l.id, name: l.name, add: l.houses - before, to: l.houses };
-			});
-		return { levels: n, cost, per };
+	const buildCurrent = $derived(buildTile?.houses ?? 0);
+	// Level buttons for THIS tile: 1–4 houses, 5 = hotel. Each option shows
+	// the levels to add and total cost from the tile's current state.
+	const buildOptions = $derived.by(() => {
+		if (!buildTile) return [] as { level: number; add: number; cost: number }[];
+		const unit = buildTile.houseCost ?? 0;
+		return [1, 2, 3, 4, 5].map((level) => {
+			const add = level - buildTile.houses;
+			return { level, add, cost: Math.max(0, add) * unit };
+		});
 	});
-	const buildCapped = $derived(Math.min(Math.max(1, Math.floor(buildCount) || 1), Math.max(1, groupHeadroom)));
-	const previewShort = $derived(
-		buildGroup.length <= 1 || buildPreview.levels <= 1
-			? ''
-			: ` → ${buildPreview.per.map((p) => `${p.name} +${p.add}`).join(', ')}`
+	const selectedBuild = $derived(buildOptions.find((o) => o.level === buildTarget));
+	const canAffordSelected = $derived(
+		selectedBuild != null &&
+			selectedBuild.add > 0 &&
+			(gameStore.me?.cash ?? 0) >= selectedBuild.cost
 	);
 	// Older servers omit lapsCompleted — only an explicit 0 locks buying.
 	const buyLocked = $derived((gameStore.me?.lapsCompleted ?? 1) < 1);
@@ -130,14 +96,22 @@
 		if (buildTileId != null && !myBuildable.some((t) => t.id === buildTileId)) {
 			buildTileId = myBuildable.length > 0 ? myBuildable[0].id : null;
 		}
-		// Keep the bulk quantity within the group's remaining headroom.
-		if (groupHeadroom > 0 && buildCount > groupHeadroom) buildCount = groupHeadroom;
-		if (buildCount < 1) buildCount = 1;
+		// New/changed tile: default the target to the next level up.
+		if (buildTileId !== lastBuildTile) {
+			lastBuildTile = buildTileId;
+			const cur = buildTile?.houses ?? 0;
+			buildTarget = cur < 5 ? cur + 1 : null;
+		} else if (buildTarget != null && buildTile && buildTarget <= buildTile.houses) {
+			// Server state moved past our selection (built elsewhere):
+			// re-default to the next level.
+			buildTarget = buildTile.houses < 5 ? buildTile.houses + 1 : null;
+		}
 	});
 
-	async function buildMany() {
-		if (buildTileId == null || building) return;
-		const n = Math.min(Math.max(1, Math.floor(buildCount) || 1), 25);
+	async function buildToTarget() {
+		if (buildTileId == null || building || !buildTile || buildTarget == null) return;
+		const n = buildTarget - buildTile.houses;
+		if (n < 1) return;
 		building = true;
 		try {
 			await send('BUILD_HOUSE', { tileId: buildTileId, count: n });
@@ -294,7 +268,7 @@
 			{:else}
 				<div class="rounded-xl border border-purple-300 bg-purple-50 p-2">
 					<p class="mb-1 text-xs font-medium text-purple-800">
-						🏠 বাড়ি → হোটেল (গ্রুপে সমানভাবে বণ্টন হয়)
+						🏠 {buildTile?.nameBn} · এখন {levelLabel(buildCurrent)} · প্রতি ধাপ ৳{buildTile?.houseCost ?? 0}
 					</p>
 					<select
 						class="mb-2 w-full rounded-lg border border-purple-300 bg-white px-2 py-1.5 text-sm text-slate-900"
@@ -306,65 +280,37 @@
 							</option>
 						{/each}
 					</select>
-					{#if buildGroup.length > 1}
-						<p class="mb-2 text-[11px] leading-relaxed text-purple-900/80">
-							{buildTile?.group} গ্রুপ: {buildGroup
-								.map((t) => `${t.nameBn} ${levelLabel(t.houses)}`)
-								.join(' · ')}
-						</p>
-					{/if}
-					<div class="mb-2 flex items-center gap-2">
-						<span class="text-xs font-medium text-purple-800">পরিমাণ:</span>
-						<div class="flex items-center rounded-lg border border-purple-300 bg-white">
+					<div class="mb-2 grid grid-cols-5 gap-1.5" role="group" aria-label="কোন লেভেল পর্যন্ত তুলবেন">
+						{#each buildOptions as opt (opt.level)}
+							{@const cash = gameStore.me?.cash ?? 0}
+							{@const active = buildTarget === opt.level}
+							{@const disabled = opt.add <= 0 || cash < opt.cost}
 							<button
-								class="px-2.5 py-1 text-base font-bold text-purple-700 transition hover:bg-purple-100 active:scale-95 disabled:opacity-40"
-								disabled={building || buildCapped <= 1}
-								onclick={() => (buildCount = Math.max(1, buildCapped - 1))}
-								aria-label="কমান"
+								class="flex flex-col items-center rounded-lg border px-1 py-1.5 text-xs font-bold transition active:scale-95 disabled:opacity-40 {active
+									? 'border-purple-600 bg-purple-600 text-white'
+									: 'border-purple-300 bg-white text-purple-700 hover:bg-purple-100'}"
+								disabled={building || disabled}
+								onclick={() => (buildTarget = opt.level)}
+								title={opt.level === 5 ? `হোটেল পর্যন্ত (৳${opt.cost})` : `${opt.level} পর্যন্ত (৳${opt.cost})`}
 							>
-								−
+								<span class="text-sm">{opt.level === 5 ? '🏨' : `${opt.level}🏠`}</span>
+								<span class={active ? 'text-white' : 'font-medium text-slate-500'}>৳{opt.cost}</span>
 							</button>
-							<span class="min-w-8 text-center text-sm font-bold text-slate-900">{buildCapped}</span>
-							<button
-								class="px-2.5 py-1 text-base font-bold text-purple-700 transition hover:bg-purple-100 active:scale-95 disabled:opacity-40"
-								disabled={building || buildCapped >= Math.max(1, groupHeadroom)}
-								onclick={() => (buildCount = Math.min(Math.max(1, groupHeadroom), buildCapped + 1))}
-								aria-label="বাড়ান"
-							>
-								+
-							</button>
-						</div>
-						<div class="flex gap-1">
-							{#each [1, 3, 5] as q}
-								<button
-									class="rounded-lg border px-2 py-1 text-xs font-bold transition active:scale-95 disabled:opacity-40 {buildCapped === Math.min(q, Math.max(1, groupHeadroom)) ? 'border-purple-600 bg-purple-600 text-white' : 'border-purple-300 bg-white text-purple-700 hover:bg-purple-100'}"
-									disabled={building || q > Math.max(1, groupHeadroom)}
-									onclick={() => (buildCount = Math.min(q, Math.max(1, groupHeadroom)))}
-								>
-									×{q}
-								</button>
-							{/each}
-							<button
-								class="rounded-lg border px-2 py-1 text-xs font-bold transition active:scale-95 disabled:opacity-40 {buildCapped === Math.max(1, groupHeadroom) ? 'border-purple-600 bg-purple-600 text-white' : 'border-purple-300 bg-white text-purple-700 hover:bg-purple-100'}"
-								disabled={building || groupHeadroom < 1}
-								onclick={() => (buildCount = Math.max(1, groupHeadroom))}
-								title="গ্রুপের সব খালি ধাপ একবারে"
-							>
-								MAX
-							</button>
-						</div>
+						{/each}
 					</div>
 					<button
 						class="w-full rounded-xl bg-purple-600 px-4 py-2 font-bold text-white transition hover:bg-purple-500 active:scale-95 disabled:opacity-50"
-						disabled={building || buildTileId == null || buildPreview.levels === 0}
-						onclick={buildMany}
+						disabled={building || !canAffordSelected}
+						onclick={buildToTarget}
 					>
 						{#if building}
 							<span class="inline-block animate-spin align-middle">⏳</span> তৈরি হচ্ছে…
-						{:else if buildCapped > 1}
-							{buildPreview.levels}টি ধাপ তৈরি করুন (৳{buildPreview.cost}){previewShort}
+						{:else if selectedBuild && selectedBuild.add > 0}
+							{selectedBuild.level === 5
+								? `হোটেল তৈরি করুন (৳${selectedBuild.cost})`
+								: `${selectedBuild.add}টি বাড়ি তৈরি করুন (৳${selectedBuild.cost})`}
 						{:else}
-							{buildLabel || 'বাড়ি তৈরি করুন'} {buildTile ? `(৳${buildTile.houseCost})` : ''}
+							ধাপ বেছে নিন
 						{/if}
 					</button>
 					{#if gameStore.lastError}

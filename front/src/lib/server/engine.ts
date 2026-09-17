@@ -800,50 +800,26 @@ export function buildHouse(rs: RoomState, playerId: string, tileId: number, coun
 		throw errEngine('BOARD_NOT_SOLD_OUT', 'সব সম্পত্তি বিক্রি হওয়ার আগে বাড়ি/হোটেল তৈরি করা যাবে না।');
 	}
 	const want = Math.max(1, Math.min(25, Math.floor(count) || 1));
-	// Bulk builds distribute evenly across the player's owned tiles in the
-	// same group (lowest level first, chosen tile wins ties), so one click
-	// can raise a whole group without tripping UNEVEN_BUILD.
+	// Single-tile builds only: raise THIS tile by `want` levels (cap at
+	// hotel). No even-distribution across the group — the player picks the
+	// exact tile and level from the UI.
 	const groupTiles = Object.values(s.tiles).filter(
 		(u) => u.type === 'PROPERTY' && u.group === t.group && u.ownerId === p.id
 	);
 	if (groupTiles.length === 0) throw errEngine('NOT_YOUR_PROPERTY', 'এই সম্পত্তি আপনার নয়।');
-	if (groupTiles.every((u) => u.houses >= 5)) {
-		throw errEngine('MAX_LEVEL', 'এই গ্রুপে ইতিমধ্যে সব হোটেল হয়ে গেছে।');
+	if (t.houses >= 5) {
+		throw errEngine('MAX_LEVEL', 'এখানে ইতিমধ্যে হোটেল হয়ে গেছে।');
 	}
-	const builtPerTile = new Map<number, number>();
-	let built = 0;
-	for (let i = 0; i < want; i++) {
-		const candidates = groupTiles.filter((u) => u.houses < 5);
-		if (candidates.length === 0) break;
-		candidates.sort((a, b) => a.houses - b.houses || (a.id === tileId ? -1 : b.id === tileId ? 1 : a.id - b.id));
-		const target = candidates[0];
-		const cost = target.houseCost ?? 0;
-		if (p.cash < cost) {
-			if (built === 0) throw errEngine('INSUFFICIENT_FUNDS', 'বাড়ি তৈরির টাকা নেই।');
-			break;
-		}
-		p.cash -= cost;
-		target.houses++;
-		built++;
-		builtPerTile.set(target.id, (builtPerTile.get(target.id) ?? 0) + 1);
-	}
-	if (built === 0) throw errEngine('INSUFFICIENT_FUNDS', 'বাড়ি তৈরির টাকা নেই।');
-	if (builtPerTile.size === 1) {
-		const onlyId = [...builtPerTile.keys()][0];
-		const only = s.tiles[onlyId];
-		const n = builtPerTile.get(onlyId) ?? built;
-		if (only.houses === 5 && n === 1) appendLog(s, `${p.name} ${only.nameBn}-এ হোটেল তৈরি করেছেন!`);
-		else if (n === 1) appendLog(s, `${p.name} ${only.nameBn}-এ বাড়ি তৈরি করেছেন (${only.houses})।`);
-		else appendLog(s, `${p.name} ${only.nameBn}-এ ${n}টি ধাপ তৈরি করেছেন (${levelBn(only.houses)})।`);
-	} else {
-		const parts = [...builtPerTile.entries()]
-			.map(([id, n]) => `${s.tiles[id].nameBn} +${n}`)
-			.join(', ');
-		appendLog(s, `${p.name} ${t.group} গ্রুপে ${built}টি ধাপ তৈরি করেছেন (${parts})।`);
-	}
-	if (built < want) {
-		appendLog(s, `⚠️ ${want - built}টি ধাপ বাকি রয়ে গেছে (টাকা বা জায়গা শেষ)।`);
-	}
+	const headroom = 5 - t.houses;
+	const levels = Math.min(want, headroom);
+	const unit = t.houseCost ?? 0;
+	const total = unit * levels;
+	if (p.cash < total) throw errEngine('INSUFFICIENT_FUNDS', 'বাড়ি তৈরির টাকা নেই।');
+	p.cash -= total;
+	t.houses += levels;
+	if (t.houses >= 5) appendLog(s, `${p.name} ${t.nameBn}-এ হোটেল তৈরি করেছেন!`);
+	else if (levels === 1) appendLog(s, `${p.name} ${t.nameBn}-এ বাড়ি তৈরি করেছেন (${t.houses})।`);
+	else appendLog(s, `${p.name} ${t.nameBn}-এ ${levels}টি বাড়ি তৈরি করেছেন (${levelBn(t.houses)})।`);
 }
 
 function levelBn(houses: number): string {
