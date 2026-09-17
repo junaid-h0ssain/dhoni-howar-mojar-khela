@@ -245,7 +245,7 @@
 						class="w-full rounded-xl bg-amber-600 px-4 py-2.5 font-bold text-white transition hover:bg-amber-500 active:scale-95"
 						onclick={() => send('PAY_JAIL_FINE', {})}
 					>
-						🔓 ৳100 জরিমানা দিয়ে বের হোন
+						🔓 ৳50 জরিমানা দিয়ে বের হোন
 					</button>
 					<button
 						class="w-full rounded-xl bg-purple-600 px-4 py-2.5 font-bold text-white transition hover:bg-purple-500 active:scale-95 disabled:opacity-50"

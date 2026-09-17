@@ -12,7 +12,7 @@ import { CHANCE_CARDS, CHEST_CARDS, cardTone, type Card } from '$lib/constants/c
 export const START_CASH = 1500;
 export const GO_SALARY = 200;
 export const EXTREME_GO_SALARY = 500;
-export const JAIL_FINE = 100;
+export const JAIL_FINE = 50;
 export const MAX_JAIL_TURNS = 3;
 
 export const START_CASH_OPTIONS = [1000, 1500, 2000, 3000, 5000];
