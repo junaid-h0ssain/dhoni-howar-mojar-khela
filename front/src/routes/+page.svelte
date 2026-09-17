@@ -17,9 +17,13 @@
 	let showSoldOut = $state(false);
 	let soldOutSeenFor: string | null = $state(null);
 	let soundMuted = $state(false);
-	// Log watermark: only entries appended after we first see the state can
-	// trigger sounds, so joining mid-game never blasts audio.
-	let seenLogCount = $state(-1);
+	// Log anchor: the last entry we already processed. A length-based
+	// watermark cannot work here — the server caps logs at 100, so length
+	// plateaus at 100 and nothing ever looks "fresh" again. Match by
+	// content so sounds keep firing for the whole game.
+	let lastSeenLog: string | null = $state(null);
+	let logWatchInit = $state(false);
+	let logWatchRoom: string | null = $state(null);
 
 	function handleLeave() {
 		selectedTile = null;
@@ -54,13 +58,26 @@
 	$effect(() => {
 		const logs = gameStore.gameState?.logs;
 		if (!logs) return;
-		if (seenLogCount < 0) {
-			seenLogCount = logs.length;
+		const roomId = gameStore.gameState?.roomId ?? null;
+		if (!logWatchInit || roomId !== logWatchRoom) {
+			// First sight or a different room: anchor silently so joining
+			// mid-game never blasts audio for old entries.
+			logWatchInit = true;
+			logWatchRoom = roomId;
+			lastSeenLog = logs.length > 0 ? logs[logs.length - 1] : null;
 			return;
 		}
-		if (logs.length <= seenLogCount) return;
-		const fresh = logs.slice(seenLogCount);
-		seenLogCount = logs.length;
+		let fresh: string[];
+		if (lastSeenLog == null) {
+			fresh = logs.slice();
+		} else {
+			const idx = logs.lastIndexOf(lastSeenLog);
+			// Anchor gone (trimmed past the 100-entry cap between polls):
+			// resync silently instead of replaying the whole window.
+			fresh = idx < 0 ? [] : logs.slice(idx + 1);
+		}
+		lastSeenLog = logs.length > 0 ? logs[logs.length - 1] : lastSeenLog;
+		if (fresh.length === 0) return;
 		if (fresh.some((l) => l.includes('পাশা ফেলেছেন'))) playDiceRoll();
 		if (fresh.some((l) => l.includes('জোড়া পেয়েছেন'))) playDouble();
 		if (
