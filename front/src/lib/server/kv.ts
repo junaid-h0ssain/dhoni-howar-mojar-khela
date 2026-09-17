@@ -6,6 +6,7 @@
 // Plain fetch, no extra dependencies.
 import { env } from '$env/dynamic/private';
 import type { RoomState } from './engine';
+import { noteUpstash, type PerfCtx } from './perf';
 
 export interface PersistedRoom {
 	rs: RoomState;
@@ -29,19 +30,34 @@ export function kvMode(): 'upstash' | 'memory' {
 	return restConfig() ? 'upstash' : 'memory';
 }
 
-async function pipeline(cmds: unknown[][]): Promise<Array<{ result: unknown }>> {
+async function pipeline(
+	cmds: unknown[][],
+	ctx?: PerfCtx
+): Promise<Array<{ result: unknown }>> {
 	const cfg = restConfig();
 	if (!cfg) throw new Error('upstash not configured');
-	const res = await fetch(`${cfg.url}/pipeline`, {
-		method: 'POST',
-		headers: {
-			authorization: `Bearer ${cfg.token}`,
-			'content-type': 'application/json'
-		},
-		body: JSON.stringify(cmds)
-	});
-	if (!res.ok) throw new Error(`upstash ${res.status}`);
-	return res.json();
+	const t0 = Date.now();
+	try {
+		const res = await fetch(`${cfg.url}/pipeline`, {
+			method: 'POST',
+			headers: {
+				authorization: `Bearer ${cfg.token}`,
+				'content-type': 'application/json'
+			},
+			body: JSON.stringify(cmds)
+		});
+		if (!res.ok) {
+			noteUpstash(ctx, cmds.map((c) => String(c[0])), Date.now() - t0, false);
+			throw new Error(`upstash ${res.status}`);
+		}
+		const out = (await res.json()) as Array<{ result: unknown }>;
+		noteUpstash(ctx, cmds.map((c) => String(c[0])), Date.now() - t0, true);
+		return out;
+	} catch (e) {
+		if (e instanceof Error && e.message.startsWith('upstash ')) throw e;
+		noteUpstash(ctx, cmds.map((c) => String(c[0])), Date.now() - t0, false);
+		throw e;
+	}
 }
 
 function key(id: string): string {
@@ -67,7 +83,7 @@ function memLocks(): Map<string, { token: string; expiresAt: number }> {
 	return globalThis.__mahajoniLocks;
 }
 
-export async function kvGet(id: string): Promise<PersistedRoom | null> {
+export async function kvGet(id: string, ctx?: PerfCtx): Promise<PersistedRoom | null> {
 	const k = key(id);
 	if (!restConfig()) {
 		const entry = memMap().get(k);
@@ -80,10 +96,13 @@ export async function kvGet(id: string): Promise<PersistedRoom | null> {
 		return entry.data;
 	}
 	try {
-		const [got] = await pipeline([
-			['GET', k],
-			['EXPIRE', k, TTL_SECONDS]
-		]);
+		const [got] = await pipeline(
+			[
+				['GET', k],
+				['EXPIRE', k, TTL_SECONDS]
+			],
+			ctx
+		);
 		const raw = got?.result as string | null;
 		if (!raw) return null;
 		return JSON.parse(raw) as PersistedRoom;
@@ -93,21 +112,21 @@ export async function kvGet(id: string): Promise<PersistedRoom | null> {
 	}
 }
 
-export async function kvSet(id: string, data: PersistedRoom): Promise<void> {
+export async function kvSet(id: string, data: PersistedRoom, ctx?: PerfCtx): Promise<void> {
 	const k = key(id);
 	if (!restConfig()) {
 		memMap().set(k, { data, expiresAt: Date.now() + TTL_SECONDS * 1000 });
 		return;
 	}
 	try {
-		await pipeline([['SET', k, JSON.stringify(data), 'EX', TTL_SECONDS]]);
+		await pipeline([['SET', k, JSON.stringify(data), 'EX', TTL_SECONDS]], ctx);
 	} catch (e) {
 		console.error(`kvSet ${id} failed:`, e);
 		throw new Error('Storage unavailable. Try again.');
 	}
 }
 
-export async function kvSetIfAbsent(id: string, data: PersistedRoom): Promise<boolean> {
+export async function kvSetIfAbsent(id: string, data: PersistedRoom, ctx?: PerfCtx): Promise<boolean> {
 	const k = key(id);
 	if (!restConfig()) {
 		if (memMap().has(k)) return false;
@@ -115,7 +134,7 @@ export async function kvSetIfAbsent(id: string, data: PersistedRoom): Promise<bo
 		return true;
 	}
 	try {
-		const [result] = await pipeline([['SET', k, JSON.stringify(data), 'NX', 'EX', TTL_SECONDS]]);
+		const [result] = await pipeline([['SET', k, JSON.stringify(data), 'NX', 'EX', TTL_SECONDS]], ctx);
 		return result?.result === 'OK';
 	} catch (e) {
 		console.error(`kvSetIfAbsent ${id} failed:`, e);
@@ -123,7 +142,7 @@ export async function kvSetIfAbsent(id: string, data: PersistedRoom): Promise<bo
 	}
 }
 
-export async function kvTryLock(id: string, token: string, ttlMs: number): Promise<boolean> {
+export async function kvTryLock(id: string, token: string, ttlMs: number, ctx?: PerfCtx): Promise<boolean> {
 	const k = `${key(id)}:lock`;
 	if (!restConfig()) {
 		const existing = memLocks().get(k);
@@ -132,7 +151,7 @@ export async function kvTryLock(id: string, token: string, ttlMs: number): Promi
 		return true;
 	}
 	try {
-		const [result] = await pipeline([['SET', k, token, 'NX', 'PX', ttlMs]]);
+		const [result] = await pipeline([['SET', k, token, 'NX', 'PX', ttlMs]], ctx);
 		return result?.result === 'OK';
 	} catch (e) {
 		console.error(`kvTryLock ${id} failed:`, e);
@@ -140,33 +159,36 @@ export async function kvTryLock(id: string, token: string, ttlMs: number): Promi
 	}
 }
 
-export async function kvReleaseLock(id: string, token: string): Promise<void> {
+export async function kvReleaseLock(id: string, token: string, ctx?: PerfCtx): Promise<void> {
 	const k = `${key(id)}:lock`;
 	if (!restConfig()) {
 		if (memLocks().get(k)?.token === token) memLocks().delete(k);
 		return;
 	}
 	try {
-		await pipeline([[
-			'EVAL',
-			'if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) end return 0',
-			1,
-			k,
-			token
-		]]);
+		await pipeline(
+			[[
+				'EVAL',
+				'if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) end return 0',
+				1,
+				k,
+				token
+			]],
+			ctx
+		);
 	} catch (e) {
 		console.error(`kvReleaseLock ${id} failed:`, e);
 	}
 }
 
-export async function kvDel(id: string): Promise<void> {
+export async function kvDel(id: string, ctx?: PerfCtx): Promise<void> {
 	const k = key(id);
 	if (!restConfig()) {
 		memMap().delete(k);
 		return;
 	}
 	try {
-		await pipeline([['DEL', k]]);
+		await pipeline([['DEL', k]], ctx);
 	} catch (e) {
 		console.error(`kvDel ${id} failed:`, e);
 		throw new Error('Storage unavailable. Try again.');

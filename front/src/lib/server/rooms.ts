@@ -10,6 +10,7 @@ import {
 	EngineError, type RoomState
 } from './engine';
 import { kvGet, kvSet, kvSetIfAbsent, kvDel, kvTryLock, kvReleaseLock, type PersistedRoom } from './kv';
+import type { PerfCtx } from './perf';
 
 interface Room {
 	id: string;
@@ -26,8 +27,8 @@ function persist(room: Room): PersistedRoom {
 	return { rs: room.rs, sessions: [...room.sessions.entries()], createdAt: room.createdAt };
 }
 
-async function save(room: Room): Promise<void> {
-	await kvSet(room.id, persist(room));
+async function save(room: Room, ctx?: PerfCtx): Promise<void> {
+	await kvSet(room.id, persist(room), ctx);
 }
 
 export function uid(): string {
@@ -37,16 +38,17 @@ export function uid(): string {
 const LOCK_TTL_MS = 5_000;
 const LOCK_ATTEMPTS = 20;
 
-async function withRoomLock<T>(roomId: string, work: () => Promise<T>): Promise<T> {
+async function withRoomLock<T>(roomId: string, work: () => Promise<T>, ctx?: PerfCtx): Promise<T> {
 	const id = roomId.trim().toUpperCase();
 	if (!id) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
 	const token = uid();
 	for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
-		if (await kvTryLock(id, token, LOCK_TTL_MS)) {
+		if (ctx) ctx.lockAttempts++;
+		if (await kvTryLock(id, token, LOCK_TTL_MS, ctx)) {
 			try {
 				return await work();
 			} finally {
-				await kvReleaseLock(id, token);
+				await kvReleaseLock(id, token, ctx);
 			}
 		}
 		await new Promise((resolve) => setTimeout(resolve, 25 + Math.random() * 50));
@@ -54,28 +56,28 @@ async function withRoomLock<T>(roomId: string, work: () => Promise<T>): Promise<
 	throw new EngineError('ROOM_BUSY', 'ঘরটি ব্যস্ত আছে। আবার চেষ্টা করুন।');
 }
 
-export async function getRoom(id: string): Promise<Room | undefined> {
+export async function getRoom(id: string, ctx?: PerfCtx): Promise<Room | undefined> {
 	if (!id) return undefined;
 	const norm = id.trim().toUpperCase();
-	const p = await kvGet(norm);
+	const p = await kvGet(norm, ctx);
 	if (!p) return undefined;
 	return toRoom(norm, p);
 }
 
-async function generateRoomCode(): Promise<string> {
+async function generateRoomCode(ctx?: PerfCtx): Promise<string> {
 	for (let i = 0; i < 50; i++) {
 		const code = String(Math.floor(1000 + Math.random() * 9000));
-		if (!(await kvGet(code))) return code;
+		if (!(await kvGet(code, ctx))) return code;
 	}
 	return String(Date.now()).slice(-4);
 }
 
-export async function createRoom(playerName: string, settings?: unknown): Promise<{ room: Room; playerId: string; token: string }> {
+export async function createRoom(playerName: string, settings?: unknown, ctx?: PerfCtx): Promise<{ room: Room; playerId: string; token: string }> {
 	const name = playerName.trim();
 	if (!name) throw new EngineError('INVALID_NAME', 'আপনার নাম দিন।');
 	if (name.length > 32) throw new EngineError('INVALID_NAME', 'নাম ৩২ অক্ষরের মধ্যে রাখুন।');
 	for (let attempt = 0; attempt < 50; attempt++) {
-		const id = await generateRoomCode();
+		const id = await generateRoomCode(ctx);
 		const rs = newRoomState(id, '');
 		const room: Room = { id, rs, sessions: new Map(), createdAt: Date.now() };
 		const playerId = uid();
@@ -91,17 +93,17 @@ export async function createRoom(playerName: string, settings?: unknown): Promis
 		room.sessions.set(token, playerId);
 		rs.version++;
 		touch(room, playerId);
-		if (await kvSetIfAbsent(id, persist(room))) return { room, playerId, token };
+		if (await kvSetIfAbsent(id, persist(room), ctx)) return { room, playerId, token };
 	}
 	throw new EngineError('ROOM_CREATE_FAILED', 'ঘর তৈরি করা যায়নি। আবার চেষ্টা করুন।');
 }
 
-export async function joinRoom(roomId: string, playerName: string): Promise<{ room: Room; playerId: string; token: string }> {
+export async function joinRoom(roomId: string, playerName: string, ctx?: PerfCtx): Promise<{ room: Room; playerId: string; token: string }> {
 	const name = playerName.trim();
 	if (!name) throw new EngineError('INVALID_NAME', 'আপনার নাম দিন।');
 	if (name.length > 32) throw new EngineError('INVALID_NAME', 'নাম ৩২ অক্ষরের মধ্যে রাখুন।');
 	return withRoomLock(roomId, async () => {
-		const room = await getRoom(roomId);
+		const room = await getRoom(roomId, ctx);
 		if (!room) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
 		const s = room.rs.state;
 		if (s.status === 'FINISHED') throw new EngineError('GAME_FINISHED', 'খেলা শেষ হয়ে গেছে। নতুন ঘর তৈরি করুন।');
@@ -125,7 +127,7 @@ export async function joinRoom(roomId: string, playerName: string): Promise<{ ro
 			room.rs.version++;
 			touch(room, existing.id);
 			s.logs.push(`${existing.name} পুনরায় যোগ দিয়েছেন।`);
-			await save(room);
+			await save(room, ctx);
 			return { room, playerId: existing.id, token };
 		}
 		const playerId = uid();
@@ -136,9 +138,9 @@ export async function joinRoom(roomId: string, playerName: string): Promise<{ ro
 		room.sessions.set(token, playerId);
 		room.rs.version++;
 		touch(room, playerId);
-		await save(room);
+		await save(room, ctx);
 		return { room, playerId, token };
-	});
+	}, ctx);
 }
 
 export function playerIdFor(room: Room, token: string): string | undefined {
@@ -165,10 +167,10 @@ export type ActionType =
 	| 'END_TURN' | 'PAY_JAIL_FINE' | 'USE_JAIL_CARD' | 'UPDATE_SETTINGS';
 
 export async function applyAction(
-	roomId: string, token: string, type: ActionType, payload: Record<string, unknown> = {}
+	roomId: string, token: string, type: ActionType, payload: Record<string, unknown> = {}, ctx?: PerfCtx
 	): Promise<Room> {
 	return withRoomLock(roomId, async () => {
-		const room = await getRoom(roomId);
+		const room = await getRoom(roomId, ctx);
 		if (!room) throw new EngineError('ROOM_NOT_FOUND', 'ঘর পাওয়া যায়নি।');
 		const playerId = playerIdFor(room, token);
 		if (!playerId) throw new EngineError('INVALID_SESSION', 'সেশন পাওয়া যায়নি। আবার যোগ দিন।');
@@ -230,14 +232,14 @@ export async function applyAction(
 			throw new EngineError('UNKNOWN_ACTION', 'অজানা অ্যাকশন।');
 	}
 		bump(room);
-		await save(room);
+		await save(room, ctx);
 		return room;
-	});
+	}, ctx);
 }
 
-export async function leaveRoom(roomId: string, token: string): Promise<void> {
+export async function leaveRoom(roomId: string, token: string, ctx?: PerfCtx): Promise<void> {
 	await withRoomLock(roomId, async () => {
-		const room = await getRoom(roomId);
+		const room = await getRoom(roomId, ctx);
 		if (!room) return;
 		const playerId = playerIdFor(room, token);
 		if (!playerId) return;
@@ -246,12 +248,12 @@ export async function leaveRoom(roomId: string, token: string): Promise<void> {
 		delete room.rs.lastSeen[playerId];
 		if (removed) room.rs.state.logs.push(`${removed.name} ঘর ছেড়ে গেছেন।`);
 		if (room.rs.state.players.length === 0) {
-			await kvDel(room.id);
+			await kvDel(room.id, ctx);
 			return;
 		}
 		bump(room);
-		await save(room);
-	});
+		await save(room, ctx);
+	}, ctx);
 }
 
 function int(v: unknown, fallback: number): number {

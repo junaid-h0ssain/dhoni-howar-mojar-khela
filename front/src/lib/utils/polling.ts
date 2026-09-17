@@ -180,6 +180,10 @@ function applyState(state: GameState, version?: number) {
 	ensurePollingCadence();
 }
 
+function now(): number {
+	return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
 async function fetchState(): Promise<boolean> {
 	if (stateRequest) return stateRequest;
 	stateRequest = fetchStateOnce();
@@ -193,6 +197,7 @@ async function fetchState(): Promise<boolean> {
 async function fetchStateOnce(): Promise<boolean> {
 	const saved = loadSavedSession();
 	if (!saved) return false;
+	const t0 = now();
 	try {
 		const res = await fetch(`/api/rooms/${encodeURIComponent(saved.roomId)}/state`, {
 			headers: { authorization: `Bearer ${saved.sessionToken}` }
@@ -209,8 +214,10 @@ async function fetchStateOnce(): Promise<boolean> {
 		gameStore.connection = 'open';
 		gameStore.lastError = null;
 		pollFailures = 0;
+		console.debug(`[mahajoni-client-perf] ${JSON.stringify({ op: 'poll', ms: Math.round(now() - t0) })}`);
 		return true;
 	} catch {
+		console.debug(`[mahajoni-client-perf] ${JSON.stringify({ op: 'poll', ms: Math.round(now() - t0), err: true })}`);
 		pollFailures++;
 		gameStore.connection = 'closed';
 		return false;
@@ -417,6 +424,7 @@ async function sendOnce(type: string, payload: Record<string, unknown> = {}): Pr
 		gameStore.lastError = 'ঘরে যোগ দিন।';
 		return;
 	}
+	const t0 = now();
 	try {
 		const res = await fetch(`/api/rooms/${encodeURIComponent(saved.roomId)}/action`, {
 			method: 'POST',
@@ -426,11 +434,14 @@ async function sendOnce(type: string, payload: Record<string, unknown> = {}): Pr
 		const body = await res.json().catch(() => ({}));
 		if (!res.ok) {
 			handleServerError(body);
+			console.debug(`[mahajoni-client-perf] ${JSON.stringify({ op: 'action', type, ms: Math.round(now() - t0), err: body?.code ?? res.status })}`);
 			return;
 		}
 		applyState(body.state as GameState, body.version as number);
 		gameStore.lastError = null;
+		console.debug(`[mahajoni-client-perf] ${JSON.stringify({ op: 'action', type, ms: Math.round(now() - t0) })}`);
 	} catch {
+		console.debug(`[mahajoni-client-perf] ${JSON.stringify({ op: 'action', type, ms: Math.round(now() - t0), err: true })}`);
 		gameStore.lastError = 'সংযোগে সমস্যা হয়েছে।';
 	}
 }
