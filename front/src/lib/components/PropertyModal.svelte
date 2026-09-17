@@ -15,9 +15,18 @@
 	const levelLabel = $derived(
 		!tile ? '' : tile.houses >= 5 ? 'হোটেল 🏨' : tile.houses > 0 ? `বাড়ি ×${tile.houses} 🏠` : 'খালি জমি'
 	);
+	// Full-group monopoly doubles rent at every level (server rule) — mirror
+	// it here so the preview matches what visitors actually pay.
+	const ownerHasFullGroup = $derived(
+		tile?.type === 'PROPERTY' && tile.ownerId && tile.group
+			? Object.values(gameStore.gameState?.tiles ?? {}).every(
+					(t) => t.type !== 'PROPERTY' || t.group !== tile.group || t.ownerId === tile.ownerId
+				)
+			: false
+	);
 	const currentRent = $derived(
 		tile?.rentTiers
-			? tile.rentTiers[Math.min(tile.houses, 5)]
+			? tile.rentTiers[Math.min(tile.houses, 5)] * (ownerHasFullGroup ? 2 : 1)
 			: undefined
 	);
 	// Railroad rent (server rule: 25/50/100/200 by count owned).
@@ -157,7 +166,7 @@
 						{/each}
 					</ul>
 					{#if currentRent !== undefined && owner}
-						<p class="mt-1 text-slate-600">বর্তমান ভাড়া: <b class="text-amber-700">৳{currentRent}</b></p>
+						<p class="mt-1 text-slate-600">বর্তমান ভাড়া: <b class="text-amber-700">৳{currentRent}</b>{#if ownerHasFullGroup}<span class="ml-1 text-xs font-medium text-emerald-700">(ফুল গ্রুপ ×২ সহ)</span>{/if}</p>
 					{/if}
 				</div>
 			{/if}

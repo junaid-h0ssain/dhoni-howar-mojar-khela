@@ -365,12 +365,12 @@ function calculateRent(s: GameState, t: Tile, ownerId: string, diceTotal: number
 		return diceTotal * mult;
 	}
 	if (!t.rentTiers || t.rentTiers.length === 0) return 0;
-	if (t.houses > 0) {
-		const idx = Math.min(t.houses, 5);
-		return t.rentTiers[idx];
-	}
-	if (t.group && ownsFullGroup(s, ownerId, t.group)) return t.rentTiers[0] * 2;
-	return t.rentTiers[0];
+	const idx = Math.min(t.houses, 5);
+	const base = t.rentTiers[idx];
+	// Full-group monopoly doubles rent at every level — bare land, houses,
+	// and hotel alike.
+	if (t.group && ownsFullGroup(s, ownerId, t.group)) return base * 2;
+	return base;
 }
 
 function moveCardTo(rs: RoomState, p: Player, target: number): void {
