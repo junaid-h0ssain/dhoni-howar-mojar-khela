@@ -63,6 +63,7 @@ function preloadFiles(): void {
 	try {
 		for (const src of FILES) {
 			if (!fileCache.has(src)) {
+				// Warm the browser cache only — never play these instances.
 				const el = new Audio(src);
 				el.preload = 'auto';
 				el.load();
@@ -75,25 +76,24 @@ function preloadFiles(): void {
 }
 
 /**
- * Play a bundled sound file. Returns false only when muted or when Audio
- * is unavailable (caller should fall back to synth). Rewinds the cached
- * element so rapid repeat clicks replay instead of stacking.
+ * Play a bundled sound file. Always uses a fresh HTMLAudioElement so rapid
+ * or overlapping sounds never rewind/interrupt each other. Reusing a single
+ * cached element and resetting currentTime mid-playback stalls the media
+ * pipeline — after a while play() silently stops producing sound.
  */
 function playFile(src: (typeof FILES)[number], vol = 0.6): boolean {
 	if (muted) return false;
 	try {
-		let el = fileCache.get(src);
-		if (!el) {
-			el = new Audio(src);
-			el.preload = 'auto';
-			fileCache.set(src, el);
+		// Ensure the file is at least preloaded once for low latency.
+		if (!fileCache.has(src)) {
+			const warm = new Audio(src);
+			warm.preload = 'auto';
+			warm.load();
+			fileCache.set(src, warm);
 		}
+		const el = new Audio(src);
+		el.preload = 'auto';
 		el.volume = vol;
-		try {
-			el.currentTime = 0;
-		} catch {
-			/* ignore */
-		}
 		void el.play().catch(() => {
 			/* autoplay-blocked or missing file — stay silent */
 		});
