@@ -1,4 +1,13 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Next.js App Router port of the `front/` SvelteKit board game (ধনী হওয়ার মজার খেলা).
+See `../migration.md` for the porting guide. The SvelteKit app stays untouched;
+this `web/` app is developed side-by-side on the `next-try` branch.
+
+## Room storage (Upstash or in-memory)
+
+Copy `.env.example` to `.env.local`. With both `UPSTASH_REDIS_REST_URL` and
+`UPSTASH_REDIS_REST_TOKEN` empty, rooms live in server memory (local dev only).
+Set both — locally and in Vercel project env vars — so rooms survive deploys
+and are shared across serverless instances.
 
 ## Getting Started
 
