@@ -1,69 +1,296 @@
-import Image from "next/image";
+'use client';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Lobby from '@/lib/components/Lobby';
+import BoardCanvas from '@/lib/components/BoardCanvas';
+import ActionPanel from '@/lib/components/ActionPanel';
+import CardDecks from '@/lib/components/CardDecks';
+import PlayerList from '@/lib/components/PlayerList';
+import PropertyModal from '@/lib/components/PropertyModal';
+import PlayerModal from '@/lib/components/PlayerModal';
+import SoldOutModal from '@/lib/components/SoldOutModal';
+import ClickSpark from '@/lib/components/bits/ClickSpark';
+import { useGameStore } from '@/lib/stores/gameStore';
+import {
+	connect,
+	hasSavedSession,
+	leaveRoom,
+	retryNow,
+	getReconnectAttempts
+} from '@/lib/utils/polling';
+import {
+	playDiceRoll,
+	playDouble,
+	playBuild,
+	playJail,
+	unlockAudio,
+	isMuted,
+	setMuted
+} from '@/lib/utils/sound';
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+	const [selectedTile, setSelectedTile] = useState<number | null>(null);
+	const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+	const [showSoldOut, setShowSoldOut] = useState(false);
+	const [soldOutSeenFor, setSoldOutSeenFor] = useState<string | null>(null);
+	const [soundMuted, setSoundMuted] = useState(false);
+	// Log watermark: only entries appended after we first see the state can
+	// trigger sounds, so joining mid-game never blasts audio.
+	const seenLogCount = useRef(-1);
+
+	const gs = useGameStore((s) => s.gameState);
+	const roomCode = useGameStore((s) => s.roomCode);
+	const connection = useGameStore((s) => s.connection);
+
+	function handleLeave() {
+		setSelectedTile(null);
+		setSelectedPlayer(null);
+		leaveRoom();
+	}
+
+	useEffect(() => {
+		// Reload / dropped connection: the store starts empty but the seat and
+		// game live on the server for 24h — auto-RECONNECT to retain play state.
+		if (!useGameStore.getState().gameState && hasSavedSession()) {
+			connect({ resume: true });
+		}
+		setSoundMuted(isMuted());
+		// Browsers block audio until a gesture — unlock on first interaction.
+		const unlock = () => unlockAudio();
+		window.addEventListener('pointerdown', unlock, { once: true });
+		window.addEventListener('keydown', unlock, { once: true });
+		return () => {
+			window.removeEventListener('pointerdown', unlock);
+			window.removeEventListener('keydown', unlock);
+		};
+	}, []);
+
+	function toggleMute() {
+		const next = !soundMuted;
+		setSoundMuted(next);
+		setMuted(next);
+		if (!next) playDiceRoll();
+	}
+
+	// Game sounds: react to newly appended authoritative log entries.
+	// Dice ("পাশা ফেলেছেন") → rattle; double-six ("জোড়া পেয়েছেন") layers a
+	// fanfare on top; builds ("বাড়ি/হোটেল/ধাপ তৈরি") → cha-ching; sent to
+	// jail ("জেলে গেছেন") → sting. Build matching is deliberately specific:
+	// "ঘর তৈরি করেছেন" (room creation) must NOT trigger the build sound.
+	const logs = useMemo(
+		() => [...(gs?.logs ?? [])].reverse().slice(0, 12),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[gs?.logs?.length]
+	);
+
+	useEffect(() => {
+		const all = gs?.logs;
+		if (!all) return;
+		if (seenLogCount.current < 0) {
+			seenLogCount.current = all.length;
+			return;
+		}
+		if (all.length <= seenLogCount.current) return;
+		const fresh = all.slice(seenLogCount.current);
+		seenLogCount.current = all.length;
+		if (fresh.some((l) => l.includes('পাশা ফেলেছেন'))) playDiceRoll();
+		if (fresh.some((l) => l.includes('জোড়া পেয়েছেন'))) playDouble();
+		if (
+			fresh.some(
+				(l) => l.includes('বাড়ি তৈরি') || l.includes('হোটেল তৈরি') || l.includes('ধাপ তৈরি')
+			)
+		) {
+			playBuild();
+		}
+		if (fresh.some((l) => l.includes('জেলে গেছেন'))) playJail();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [gs?.logs?.length]);
+
+	function copyRoomCode() {
+		if (roomCode) navigator.clipboard?.writeText(roomCode).catch(() => {});
+	}
+
+	const inGame = !!gs || !!roomCode;
+	// Pop for EVERY player when the board sells out: derived from the
+	// authoritative GAME_STATE broadcast, so all clients see it together.
+	const allSold = useMemo(
+		() =>
+			!!gs &&
+			gs.status === 'IN_GAME' &&
+			Object.values(gs.tiles ?? {}).every((t) =>
+				t.type === 'PROPERTY' || t.type === 'UTILITY' || t.type === 'RAILROAD'
+					? !!t.ownerId
+					: true
+			),
+		[gs]
+	);
+
+	useEffect(() => {
+		const room = gs?.roomId ?? null;
+		if (!room) return;
+		if (soldOutSeenFor !== room) {
+			setSoldOutSeenFor(null);
+			setShowSoldOut(false);
+		}
+		if (allSold && soldOutSeenFor !== room) {
+			setShowSoldOut(true);
+		}
+		if (!allSold) {
+			setShowSoldOut(false);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [gs?.roomId, allSold]);
+
+	function dismissSoldOut() {
+		setShowSoldOut(false);
+		setSoldOutSeenFor(gs?.roomId ?? soldOutSeenFor);
+	}
+
+	// Header title overrides mirror the board center: a jailed turn player
+	// shows bright-red "JAIL!!!" until the turn passes; a freshly drawn card
+	// shows the deck name, green for rewards and red for payments/punishments.
+	const headerTurnPlayer =
+		gs?.status === 'IN_GAME' ? gs.players.find((p) => p.id === gs?.currentTurnPlayerId) : undefined;
+	const headerJailed = !!headerTurnPlayer?.inJail;
+	const headerCard =
+		!headerJailed && gs?.status === 'IN_GAME' && gs.lastCard ? gs.lastCard : undefined;
+	const headerTitle = headerJailed
+		? 'JAIL!!!'
+		: headerCard
+			? headerCard.deck === 'CHANCE'
+				? 'ভাগ্য পরীক্ষা'
+				: 'সুযোগ গ্রহণ'
+			: 'ধনী হওয়ার মজার খেলা';
+	const headerTitleClass =
+		headerJailed || headerCard?.tone === 'bad'
+			? 'text-red-600'
+			: headerCard?.tone === 'good'
+				? 'text-emerald-600'
+				: 'text-emerald-950';
+	const currentPlayer =
+		gs?.players.find((p) => p.id === gs?.currentTurnPlayerId) ?? null;
+	const reconnectAttempts = connection !== 'open' ? getReconnectAttempts() : 0;
+
+	return (
+		<>
+			{/* Flat off-white backdrop */}
+			<div className="pointer-events-none fixed inset-0 -z-10 bg-[#f7f4ec]"></div>
+
+			<main className="min-h-screen p-4 text-slate-800">
+				{!inGame ? (
+					<div className="py-10">
+						<Lobby />
+					</div>
+				) : (
+					<>
+						<header className="mx-auto mb-4 flex max-w-6xl flex-wrap items-center justify-between gap-3">
+							<div>
+								<h1 className={`text-2xl font-bold sm:text-3xl ${headerTitleClass}`}>{headerTitle}</h1>
+								<p className="mt-0.5 text-xs text-emerald-800/70">
+									{currentPlayer?.name ? `${currentPlayer.name} এর চাল চলছে…` : 'মহাজনি বাজারে স্বাগতম'}
+								</p>
+							</div>
+							<div className="flex items-center gap-2">
+								<button
+									className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600 transition hover:bg-slate-100 active:scale-95"
+									onClick={toggleMute}
+									title={soundMuted ? 'সাউন্ড চালু করুন' : 'সাউন্ড বন্ধ করুন'}
+								>
+									{soundMuted ? '🔇 নীরব' : '🔊 সাউন্ড'}
+								</button>
+								{roomCode && (
+									<button
+										className="rounded-xl border border-amber-600/30 bg-amber-100 px-3 py-1.5 font-mono text-lg tracking-widest text-amber-900 transition hover:bg-amber-200 active:scale-95"
+										onClick={copyRoomCode}
+										title="কপি করুন"
+									>
+										{roomCode} ⧉
+									</button>
+								)}
+								<span className="flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600">
+									<span
+										className={`inline-block h-2 w-2 rounded-full ${
+											connection === 'open' ? 'anim-glow-drift bg-emerald-500' : 'bg-red-500'
+										}`}
+									></span>
+									{connection === 'open' ? 'সংযুক্ত' : 'বিচ্ছিন্ন'}
+								</span>
+							</div>
+							{connection !== 'open' && gs && (
+								<div className="flex w-full flex-wrap items-center justify-center gap-2 rounded-xl border border-amber-600/30 bg-amber-100 px-3 py-2 text-center text-xs text-amber-900">
+									<span>
+										পুনরায় সংযোগ হচ্ছে… আপনার টাকা, জমি ও চাল সংরক্ষিত আছে।
+										{reconnectAttempts > 0 && <>(চেষ্টা {reconnectAttempts})</>}
+									</span>
+									<button
+										className="rounded-lg bg-amber-400 px-2.5 py-1 font-bold text-amber-950 transition hover:bg-amber-300 active:scale-95"
+										onClick={() => retryNow()}
+									>
+										এখনই আবার চেষ্টা করুন
+									</button>
+								</div>
+							)}
+						</header>
+
+						<div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[1fr_330px]">
+							<div className="order-1">
+								<div className="rounded-3xl border-2 border-emerald-700/25 bg-white p-1.5 shadow-[0_0_40px_-12px_rgba(4,120,87,0.35)]">
+									<div className="overflow-hidden rounded-2xl">
+										<ClickSpark sparkColor="#d97706" sparkCount={8} sparkRadius={28} duration={500}>
+											<BoardCanvas onselect={(id) => setSelectedTile(id)} />
+										</ClickSpark>
+									</div>
+								</div>
+							</div>
+							<div className="order-2 flex flex-col gap-4 lg:col-start-2 lg:row-span-2">
+								<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+									<ActionPanel onselecttile={(id) => setSelectedTile(id)} />
+								</section>
+								<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+									<PlayerList onselect={(id) => setSelectedPlayer(id)} />
+								</section>
+								<CardDecks />
+							</div>
+							{gs && (
+								<div className="order-3 lg:col-start-1">
+									<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+										<h2 className="mb-2 text-sm font-semibold tracking-wide text-emerald-800">
+											✨ খেলার লগ
+										</h2>
+										<ul className="max-h-36 space-y-1.5 overflow-y-auto text-sm">
+											{logs.map((log, i) => (
+												<li
+													key={i + ':' + log}
+													className={
+														i === 0
+															? 'anim-log-in rounded-lg border border-emerald-600/20 bg-emerald-50 px-2.5 py-1 text-emerald-900'
+															: 'px-2.5 py-0.5 text-slate-500'
+													}
+												>
+													{log}
+												</li>
+											))}
+										</ul>
+									</section>
+								</div>
+							)}
+						</div>
+						<footer className="mx-auto mt-4 max-w-6xl pb-6 text-center">
+							<button
+								className="rounded-lg border border-slate-300 px-3 py-1 text-xs text-slate-500 transition hover:border-slate-400 hover:text-slate-700"
+								onClick={handleLeave}
+								title="ঘর ছেড়ে লবিতে ফিরুন (আবার যোগ দিতে একই নাম ও রুম কোড লাগবে)"
+							>
+								ঘর ছেড়ে যান
+							</button>
+						</footer>
+					</>
+				)}
+
+				<PropertyModal tileId={selectedTile} onclose={() => setSelectedTile(null)} />
+				<PlayerModal playerId={selectedPlayer} onclose={() => setSelectedPlayer(null)} />
+				<SoldOutModal open={showSoldOut} onclose={dismissSoldOut} />
+			</main>
+		</>
+	);
 }
