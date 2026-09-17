@@ -3,13 +3,19 @@
 
 	let { cash }: { cash: number } = $props();
 
-	let prev = $state(cash);
+	let prev: number | undefined = $state(undefined);
 	let delta: number | null = $state(null);
 	let timer: ReturnType<typeof setTimeout> | undefined = undefined;
 
 	$effect(() => {
 		const current = cash;
 		const old = untrack(() => prev);
+		if (old === undefined) {
+			untrack(() => {
+				prev = current;
+			});
+			return;
+		}
 		if (current === old) return;
 		untrack(() => {
 			prev = current;

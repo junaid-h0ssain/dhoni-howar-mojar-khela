@@ -53,7 +53,7 @@ export function unlockAudio(): void {
 const FILES = [
 	'/sounds/dice.mp3',
 	'/sounds/double-6.mp3',
-	'/sounds/hotel-%26-houses.mp3',
+	'/sounds/hotel+houses.mp3',
 	'/sounds/jail.mp3'
 ] as const;
 
@@ -141,7 +141,7 @@ export function playDouble(): void {
 
 /** House/hotel build cha-ching: file, else a bright two-tone synth blip. */
 export function playBuild(): void {
-	if (playFile('/sounds/hotel-%26-houses.mp3', 0.6)) return;
+	if (playFile('/sounds/hotel+houses.mp3', 0.6)) return;
 	const c = ac();
 	if (!c) return;
 	const t0 = c.currentTime + 0.01;

@@ -1,6 +1,6 @@
+<script lang="ts">
 // Room rules picker — used in the pre-create Lobby and in the host's
 // lobby panel. Pure presentational: parent owns the values.
-<script lang="ts">
 	export const START_CASH_OPTIONS = [1000, 1500, 2000, 3000, 5000];
 	export const GO_SALARY_OPTIONS = [100, 200, 300, 500];
 
