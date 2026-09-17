@@ -54,9 +54,8 @@ function key(id: string): string {
 // --- In-memory fallback (local dev without Upstash) ---
 
 declare global {
-	// eslint-disable-next-line no-var
+	// `var` is required for global augmentation.
 	var __mahajoniKv: Map<string, { data: PersistedRoom; expiresAt: number }> | undefined;
-	// eslint-disable-next-line no-var
 	var __mahajoniLocks: Map<string, { token: string; expiresAt: number }> | undefined;
 }
 

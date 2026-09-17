@@ -122,7 +122,8 @@ function drawToken(
 			const angle = rotation + (j * Math.PI * 2) / points;
 			const x = cx + Math.cos(angle) * radius;
 			const y = cy + Math.sin(angle) * radius;
-			j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+			if (j === 0) ctx.moveTo(x, y);
+			else ctx.lineTo(x, y);
 		}
 		ctx.closePath();
 	} else {
@@ -419,7 +420,6 @@ export default function BoardCanvas({ onselect }: { onselect?: (id: number) => v
 			if (raf.current) cancelAnimationFrame(raf.current);
 			raf.current = 0;
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	// Track authoritative positions: new seats snap, movers hop.

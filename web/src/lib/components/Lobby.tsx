@@ -28,6 +28,9 @@ export default function Lobby() {
 	const lastError = useGameStore((s) => s.lastError);
 
 	useEffect(() => {
+		// Intentional mount-time hydration from localStorage (mirrors Svelte
+		// onMount): prefill name/room and surface any saved seat.
+		/* eslint-disable react-hooks/set-state-in-effect */
 		const s = loadSavedSession();
 		setSaved(s);
 		if (s?.playerName) setPlayerName(s.playerName);
@@ -38,6 +41,7 @@ export default function Lobby() {
 		} else {
 			setRoomCode(s.roomId);
 		}
+		/* eslint-enable react-hooks/set-state-in-effect */
 	}, []);
 
 	function refreshSaved() {

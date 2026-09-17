@@ -18,7 +18,7 @@ export const MAX_JAIL_TURNS = 3;
 export const START_CASH_OPTIONS = [1000, 1500, 2000, 3000, 5000];
 export const GO_SALARY_OPTIONS = [100, 200, 300, 500];
 
-export interface GameSettingsInput extends GameSettings {}
+export type GameSettingsInput = GameSettings;
 
 export const DEFAULT_SETTINGS: GameSettingsInput = {
 	startCash: START_CASH,

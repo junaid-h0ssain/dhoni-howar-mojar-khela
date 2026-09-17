@@ -31,9 +31,10 @@ import {
 export default function Home() {
 	const [selectedTile, setSelectedTile] = useState<number | null>(null);
 	const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
-	const [showSoldOut, setShowSoldOut] = useState(false);
 	const [soldOutSeenFor, setSoldOutSeenFor] = useState<string | null>(null);
-	const [soundMuted, setSoundMuted] = useState(false);
+	const [soundMuted, setSoundMuted] = useState(
+		() => typeof window !== 'undefined' && isMuted()
+	);
 	// Log watermark: only entries appended after we first see the state can
 	// trigger sounds, so joining mid-game never blasts audio.
 	const seenLogCount = useRef(-1);
@@ -54,7 +55,6 @@ export default function Home() {
 		if (!useGameStore.getState().gameState && hasSavedSession()) {
 			connect({ resume: true });
 		}
-		setSoundMuted(isMuted());
 		// Browsers block audio until a gesture — unlock on first interaction.
 		const unlock = () => unlockAudio();
 		window.addEventListener('pointerdown', unlock, { once: true });
@@ -125,24 +125,11 @@ export default function Home() {
 		[gs]
 	);
 
-	useEffect(() => {
-		const room = gs?.roomId ?? null;
-		if (!room) return;
-		if (soldOutSeenFor !== room) {
-			setSoldOutSeenFor(null);
-			setShowSoldOut(false);
-		}
-		if (allSold && soldOutSeenFor !== room) {
-			setShowSoldOut(true);
-		}
-		if (!allSold) {
-			setShowSoldOut(false);
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [gs?.roomId, allSold]);
+	// Derived (not an effect): pops once per room when the board sells out,
+	// until dismissed. A new room id re-arms it automatically.
+	const showSoldOut = allSold && soldOutSeenFor !== (gs?.roomId ?? null);
 
 	function dismissSoldOut() {
-		setShowSoldOut(false);
 		setSoldOutSeenFor(gs?.roomId ?? soldOutSeenFor);
 	}
 

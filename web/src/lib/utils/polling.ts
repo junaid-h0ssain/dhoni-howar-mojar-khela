@@ -375,7 +375,10 @@ export async function reconnectSaved(): Promise<boolean> {
 }
 
 /** Resume polling after reload when a session exists. */
-export function connect(_opts: { resume?: boolean } = {}): void {
+export function connect(
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	_opts: { resume?: boolean } = {}
+): void {
 	if (!hasSavedSession()) return;
 	gameStore.connection = 'connecting';
 	const saved = loadSavedSession();

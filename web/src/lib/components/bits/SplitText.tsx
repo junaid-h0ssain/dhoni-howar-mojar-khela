@@ -45,12 +45,11 @@ export default function SplitText({
 }: SplitTextProps) {
 	const elRef = useRef<SplitElement | null>(null);
 	const completeRef = useRef(onLetterAnimationComplete);
-	completeRef.current = onLetterAnimationComplete;
 
 	useEffect(() => {
+		completeRef.current = onLetterAnimationComplete;
 		const el = elRef.current;
 		if (!el || !text) return;
-		let fontsReady = false;
 		let cancelled = false;
 		let splitInstance: GSAPSplitText | undefined;
 
@@ -125,15 +124,12 @@ export default function SplitText({
 		};
 
 		if (document.fonts.status === 'loaded') {
-			fontsReady = true;
 			run();
 		} else {
 			document.fonts.ready.then(() => {
-				fontsReady = true;
 				run();
 			});
 		}
-		void fontsReady;
 
 		return () => {
 			cancelled = true;
@@ -155,7 +151,11 @@ export default function SplitText({
 	return (
 		<Tag
 			ref={elRef as React.RefObject<HTMLHeadingElement>}
-			style={{ textAlign, wordWrap: 'break-word', willChange: 'transform, opacity' }}
+			style={{
+				textAlign: textAlign as React.CSSProperties['textAlign'],
+				wordWrap: 'break-word',
+				willChange: 'transform, opacity'
+			}}
 			className={`split-parent overflow-hidden inline-block whitespace-normal ${className}`}
 		>
 			{text}

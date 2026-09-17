@@ -107,7 +107,10 @@ export default function ActionPanel({ onselecttile }: { onselecttile?: (id: numb
 
 	const serverSettings = gs?.settings;
 
+	// Intentional external-store sync (mirrors Svelte $effect): adopt server
+	// truth into the host's editable mirrors whenever we're not editing.
 	useEffect(() => {
+		/* eslint-disable react-hooks/set-state-in-effect */
 		// Adopt server truth whenever we're not the host editing.
 		if (!isHost || gs?.status !== 'LOBBY') {
 			if (serverSettings) {
@@ -116,6 +119,7 @@ export default function ActionPanel({ onselecttile }: { onselecttile?: (id: numb
 				setLobbyExtreme(serverSettings.extremeMode);
 			}
 		}
+		/* eslint-enable react-hooks/set-state-in-effect */
 	}, [isHost, gs?.status, serverSettings]);
 
 	function pushSettings(settings: { startCash: number; goSalary: number; extremeMode: boolean }) {
@@ -129,7 +133,10 @@ export default function ActionPanel({ onselecttile }: { onselecttile?: (id: numb
 	const effectiveGo = gs?.settings?.extremeMode ? 500 : (gs?.settings?.goSalary ?? 200);
 	const isExtreme = gs?.settings?.extremeMode === true;
 
+	// Intentional derived-default sync (mirrors Svelte $effect): keep the
+	// build dropdown and bulk quantity clamped to the buildable set.
 	useEffect(() => {
+		/* eslint-disable react-hooks/set-state-in-effect */
 		// Default the dropdown to the first buildable tile.
 		if (buildTileId == null && myBuildable.length > 0) {
 			setBuildTileId(myBuildable[0].id);
@@ -140,6 +147,7 @@ export default function ActionPanel({ onselecttile }: { onselecttile?: (id: numb
 		// Keep the bulk quantity within the group's remaining headroom.
 		if (groupHeadroom > 0 && buildCount > groupHeadroom) setBuildCount(groupHeadroom);
 		if (buildCount < 1) setBuildCount(1);
+		/* eslint-enable react-hooks/set-state-in-effect */
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [buildTileId, groupHeadroom, myBuildable.map((t) => t.id).join(',')]);
 

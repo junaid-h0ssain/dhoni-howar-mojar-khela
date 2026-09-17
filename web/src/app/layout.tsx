@@ -1,5 +1,12 @@
 import type { Metadata } from 'next';
+import { Noto_Sans_Bengali } from 'next/font/google';
 import './globals.css';
+
+const bengali = Noto_Sans_Bengali({
+	subsets: ['bengali', 'latin'],
+	weight: ['400', '500', '600', '700'],
+	display: 'swap'
+});
 
 export const metadata: Metadata = {
 	title: 'ধনী হওয়ার মজার খেলা',
@@ -8,15 +15,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
 	return (
-		<html lang="bn">
-			<head>
-				<link rel="preconnect" href="https://fonts.googleapis.com" />
-				<link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-				<link
-					href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap"
-					rel="stylesheet"
-				/>
-			</head>
+		<html lang="bn" className={bengali.className}>
 			<body>{children}</body>
 		</html>
 	);

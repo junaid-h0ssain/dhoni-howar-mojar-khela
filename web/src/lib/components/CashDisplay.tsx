@@ -7,12 +7,16 @@ export default function CashDisplay({ cash }: { cash: number }) {
 	const [delta, setDelta] = useState<number | null>(null);
 	const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+	// Intentional prop→local sync (mirrors Svelte $effect): flash the
+	// delta badge whenever the authoritative cash value changes.
 	useEffect(() => {
+		/* eslint-disable react-hooks/set-state-in-effect */
 		if (cash === prev) return;
 		setDelta(cash - prev);
 		setPrev(cash);
 		clearTimeout(timer.current);
 		timer.current = setTimeout(() => setDelta(null), 2400);
+		/* eslint-enable react-hooks/set-state-in-effect */
 		return () => clearTimeout(timer.current);
 	}, [cash, prev]);
 
