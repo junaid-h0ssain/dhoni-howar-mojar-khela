@@ -86,7 +86,10 @@ export default function Home() {
 	useEffect(() => {
 		const all = gs?.logs;
 		if (!all) return;
-		if (seenLogCount.current < 0) {
+		if (seenLogCount.current < 0 || all.length < seenLogCount.current) {
+			// First sight, or logs shrank (new room / new game): re-arm the
+			// watermark instead of replaying history — or going silent until
+			// the new log outgrows the old high-water mark.
 			seenLogCount.current = all.length;
 			return;
 		}

@@ -37,6 +37,7 @@ function ac(): AudioContext | null {
 	if (muted) return null;
 	try {
 		if (typeof window === 'undefined') return null;
+		if (ctx && ctx.state === 'closed') ctx = null;
 		if (!ctx) {
 			const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
 			ctx = new AC();
@@ -98,6 +99,11 @@ function playFile(src: (typeof FILES)[number], vol = 0.6): boolean {
 		if (!el) {
 			el = new Audio(src);
 			el.preload = 'auto';
+			// A failed load poisons the element (every later play() rejects
+			// silently). Evict it so the next play creates a fresh element.
+			el.onerror = () => {
+				fileCache.delete(src);
+			};
 			fileCache.set(src, el);
 		}
 		el.volume = vol;
