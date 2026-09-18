@@ -68,7 +68,13 @@ const SAMPLES = [
 	'/sounds/dice.mp3',
 	'/sounds/double-6.mp3',
 	'/sounds/hotel+houses.mp3',
-	'/sounds/jail.mp3'
+	'/sounds/jail.mp3',
+	'/sounds/buy-property.mp3',
+	'/sounds/bankruptcy.mp3',
+	'/sounds/jail-2.mp3',
+	'/sounds/chat.mp3',
+	'/sounds/income-tax.mp3',
+	'/sounds/luxury-tax.mp3'
 ] as const;
 
 type Sample = (typeof SAMPLES)[number];
@@ -203,6 +209,45 @@ function synthJail(c: AudioContext): void {
 	blip(c, t0 + 0.44, 98, 0.5, 'triangle', 0.18);
 }
 
+function synthBuy(c: AudioContext): void {
+	const t0 = c.currentTime + 0.01;
+	blip(c, t0, 880, 0.09, 'triangle', 0.14);
+	blip(c, t0 + 0.09, 1320, 0.16, 'triangle', 0.14);
+}
+
+function synthBankrupt(c: AudioContext): void {
+	const t0 = c.currentTime + 0.01;
+	blip(c, t0, 330, 0.2, 'sawtooth', 0.1);
+	blip(c, t0 + 0.2, 262, 0.2, 'sawtooth', 0.1);
+	blip(c, t0 + 0.4, 196, 0.45, 'sawtooth', 0.12);
+}
+
+function synthJailRelease(c: AudioContext): void {
+	const t0 = c.currentTime + 0.01;
+	blip(c, t0, 311, 0.12, 'triangle', 0.14);
+	blip(c, t0 + 0.12, 392, 0.12, 'triangle', 0.14);
+	blip(c, t0 + 0.24, 523, 0.2, 'triangle', 0.16);
+}
+
+function synthChat(c: AudioContext): void {
+	const t0 = c.currentTime + 0.01;
+	blip(c, t0, 990, 0.08, 'sine', 0.14);
+	blip(c, t0 + 0.09, 1320, 0.12, 'sine', 0.14);
+}
+
+function synthIncomeTax(c: AudioContext): void {
+	const t0 = c.currentTime + 0.01;
+	blip(c, t0, 520, 0.12, 'triangle', 0.14);
+	blip(c, t0 + 0.12, 390, 0.18, 'triangle', 0.14);
+}
+
+function synthLuxuryTax(c: AudioContext): void {
+	const t0 = c.currentTime + 0.01;
+	blip(c, t0, 660, 0.1, 'triangle', 0.14);
+	blip(c, t0 + 0.1, 495, 0.1, 'triangle', 0.14);
+	blip(c, t0 + 0.2, 330, 0.2, 'triangle', 0.14);
+}
+
 function withSynth(fn: (c: AudioContext) => void): () => void {
 	return () => {
 		const c = ac();
@@ -228,4 +273,34 @@ export function playBuild(): void {
 /** Jail sting: file, else descending "caught!" wail + low clang. */
 export function playJail(): void {
 	playSample('/sounds/jail.mp3', 0.65, withSynth(synthJail));
+}
+
+/** Property purchase stamp: file, else a bright cash-register blip. */
+export function playBuy(): void {
+	playSample('/sounds/buy-property.mp3', 0.6, withSynth(synthBuy));
+}
+
+/** Bankruptcy crash: file, else a descending sad-trombone synth. */
+export function playBankrupt(): void {
+	playSample('/sounds/bankruptcy.mp3', 0.65, withSynth(synthBankrupt));
+}
+
+/** Jail release: file, else an ascending "unlocked!" synth arpeggio. */
+export function playJailRelease(): void {
+	playSample('/sounds/jail-2.mp3', 0.65, withSynth(synthJailRelease));
+}
+
+/** Chat message ping: file, else a soft two-tone sine blip. */
+export function playChat(): void {
+	playSample('/sounds/chat.mp3', 0.55, withSynth(synthChat));
+}
+
+/** Income tax bill: file, else a descending two-tone synth. */
+export function playIncomeTax(): void {
+	playSample('/sounds/income-tax.mp3', 0.6, withSynth(synthIncomeTax));
+}
+
+/** Luxury tax bill: file, else a descending three-tone synth. */
+export function playLuxuryTax(): void {
+	playSample('/sounds/luxury-tax.mp3', 0.6, withSynth(synthLuxuryTax));
 }

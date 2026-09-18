@@ -658,7 +658,9 @@ function resolveLanding(rs: RoomState, p: Player, diceTotal: number, depth: numb
 			break;
 		case 'TAX': {
 			const tax = taxFor(s, t);
-			appendLog(s, `${p.name} কর দিয়েছেন ৳${tax}।`);
+			// Include the tile name so clients can tell income tax
+			// (আয়কর) apart from luxury tax (বিলাস কর), e.g. for sounds.
+			appendLog(s, `${p.name} ${t.nameBn} দিয়েছেন ৳${tax}।`);
 			if (!payOrBankrupt(rs, p, tax, 'bank', 'করের')) return;
 			s.turnPhase = 'ACTION';
 			break;
