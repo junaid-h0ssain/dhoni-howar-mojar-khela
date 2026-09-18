@@ -220,7 +220,9 @@ export async function applyAction(
 			break;
 		}
 		case 'ROLL_DICE': {
-			rollDice(room.rs, playerId);
+			// Optional admin-forced dice: payload { dice: [d1, d2] }. The
+			// engine rejects it for non-administrators (NOT_ADMIN).
+			rollDice(room.rs, playerId, payload['dice']);
 			autoEndIfNoAction(room.rs, playerId);
 			break;
 		}

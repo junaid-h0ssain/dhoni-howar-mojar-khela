@@ -788,11 +788,35 @@ export function startGame(rs: RoomState, settings?: unknown): void {
 	);
 }
 
-export function rollDice(rs: RoomState, playerId: string): void {
+/** Debug administrator: the player named exactly "ADMINISTRATOR" (all caps,
+ * case-sensitive) may supply forced dice. Port of back/pkg/game IsAdmin —
+ * the Go backend is frozen, so this is the live check. */
+export function isAdmin(p: Player | undefined): boolean {
+	if (!p) return false;
+	return p.name.trim() === 'ADMINISTRATOR';
+}
+
+export function rollDice(rs: RoomState, playerId: string, forced?: unknown): void {
 	const s = rs.state;
 	const p = requireTurn(rs, playerId, ['ROLL']);
-	const d1 = 1 + Math.floor(Math.random() * 6);
-	const d2 = 1 + Math.floor(Math.random() * 6);
+	let d1 = 1 + Math.floor(Math.random() * 6);
+	let d2 = 1 + Math.floor(Math.random() * 6);
+	if (forced !== undefined) {
+		if (!isAdmin(p)) {
+			throw errEngine('NOT_ADMIN', 'শুধু ADMINISTRATOR পাশা নিয়ন্ত্রণ করতে পারবেন।');
+		}
+		// Accept [d1, d2] or { d1, d2 } shapes.
+		const pair = Array.isArray(forced)
+			? forced
+			: [(forced as Record<string, unknown>)?.['d1'], (forced as Record<string, unknown>)?.['d2']];
+		const f1 = Number(pair[0]);
+		const f2 = Number(pair[1]);
+		if (!Number.isInteger(f1) || !Number.isInteger(f2) || f1 < 1 || f1 > 6 || f2 < 1 || f2 > 6) {
+			throw errEngine('INVALID_DICE', 'পাশার মান ১-৬ এর মধ্যে হতে হবে।');
+		}
+		d1 = f1;
+		d2 = f2;
+	}
 	s.dice = [d1, d2];
 	appendLog(s, `${p.name} পাশা ফেলেছেন: ${d1} + ${d2}`);
 	if (p.inJail) {

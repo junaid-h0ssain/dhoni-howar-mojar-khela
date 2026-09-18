@@ -130,6 +130,16 @@
 		send('ROLL_DICE');
 	}
 
+	// Admin fixed-dice picker: visible only to the player named exactly
+	// "ADMINISTRATOR". The server re-checks (NOT_ADMIN otherwise).
+	const isAdmin = $derived((gameStore.me?.name ?? '').trim() === 'ADMINISTRATOR');
+	let adminD1 = $state(6);
+	let adminD2 = $state(6);
+
+	function rollFixedDice() {
+		send('ROLL_DICE', { dice: [adminD1, adminD2] });
+	}
+
 	const shownDice = $derived(gameStore.gameState?.dice ?? [1, 1]);
 </script>
 
@@ -237,6 +247,40 @@
 			<p class="anim-glow-drift rounded-xl border border-emerald-600/20 bg-emerald-50 px-3 py-2.5 text-center text-sm font-medium text-emerald-900">
 				বোর্ডের মাঝখানে 🎲 চাপুন!
 			</p>
+		{/if}
+		{#if isAdmin}
+			<div class="mt-2 rounded-xl border border-red-400 bg-red-50 p-2">
+				<p class="mb-1 text-center text-xs font-bold text-red-700">
+					🛠️ ADMIN — পাশা ঠিক করে দিন
+				</p>
+				<div class="flex items-center gap-1.5">
+					<select
+						class="min-w-0 flex-1 rounded-lg border border-red-300 bg-white px-2 py-1.5 text-sm text-slate-900"
+						bind:value={adminD1}
+						aria-label="প্রথম পাশা"
+					>
+						{#each [1, 2, 3, 4, 5, 6] as n (n)}
+							<option value={n}>{n}</option>
+						{/each}
+					</select>
+					<span class="font-bold text-red-700">+</span>
+					<select
+						class="min-w-0 flex-1 rounded-lg border border-red-300 bg-white px-2 py-1.5 text-sm text-slate-900"
+						bind:value={adminD2}
+						aria-label="দ্বিতীয় পাশা"
+					>
+						{#each [1, 2, 3, 4, 5, 6] as n (n)}
+							<option value={n}>{n}</option>
+						{/each}
+					</select>
+					<button
+						class="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-bold text-white transition hover:bg-red-500 active:scale-95"
+						onclick={rollFixedDice}
+					>
+						ফেলুন
+					</button>
+				</div>
+			</div>
 		{/if}
 	{:else if gameStore.canAct}
 		{#if gameStore.me?.inJail}
