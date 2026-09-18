@@ -6,7 +6,7 @@ import {
 	newRoomState, addPlayer, removePlayer, findPlayer,
 	startGame, rollDice, autoEndIfNoAction, buyProperty,
 	buildHouse, endTurn, payJailFine, useJailCard,
-	updateSettings, sanitizeSettings,
+	updateSettings, sanitizeSettings, sendReaction, sendChat, pruneFeed,
 	EngineError, type RoomState
 } from './engine';
 import { kvGet, kvSet, kvSetIfAbsent, kvDel, kvTryLock, kvReleaseLock, type PersistedRoom } from './kv';
@@ -155,6 +155,9 @@ export function touch(room: Room, playerId: string): void {
 }
 
 export function toClient(room: Room): { state: GameState; version: number } {
+	// Opportunistic expiry so polls never serve stale floats. Not saved
+	// here — the next locked action persists the trimmed feed.
+	pruneFeed(room.rs.state);
 	return { state: room.rs.state, version: room.rs.version };
 }
 
@@ -164,7 +167,8 @@ function bump(room: Room): void {
 
 export type ActionType =
 	| 'START_GAME' | 'ROLL_DICE' | 'BUY_PROPERTY' | 'BUILD_HOUSE'
-	| 'END_TURN' | 'PAY_JAIL_FINE' | 'USE_JAIL_CARD' | 'UPDATE_SETTINGS';
+	| 'END_TURN' | 'PAY_JAIL_FINE' | 'USE_JAIL_CARD' | 'UPDATE_SETTINGS'
+	| 'SEND_REACTION' | 'SEND_CHAT';
 
 export async function applyAction(
 	roomId: string, token: string, type: ActionType, payload: Record<string, unknown> = {}, ctx?: PerfCtx
@@ -176,10 +180,24 @@ export async function applyAction(
 		if (!playerId) throw new EngineError('INVALID_SESSION', 'সেশন পাওয়া যায়নি। আবার যোগ দিন।');
 		const p = findPlayer(room.rs.state, playerId);
 		if (!p) throw new EngineError('PLAYER_NOT_FOUND', 'খেলোয়াড় পাওয়া যায়নি।');
+		touch(room, playerId);
+		// Social actions ride the same pipe but never touch game state:
+		// allowed in lobby/finished rooms, and they must not clear lastCard.
+		if (type === 'SEND_REACTION') {
+			sendReaction(room.rs, playerId, String(payload['emoji'] ?? ''));
+			bump(room);
+			await save(room, ctx);
+			return room;
+		}
+		if (type === 'SEND_CHAT') {
+			sendChat(room.rs, playerId, String(payload['text'] ?? ''));
+			bump(room);
+			await save(room, ctx);
+			return room;
+		}
 		if (room.rs.state.status === 'FINISHED') {
 			throw new EngineError('GAME_FINISHED', 'খেলা শেষ হয়ে গেছে।');
 		}
-		touch(room, playerId);
 		// A new player action supersedes any previously drawn card display:
 		// the board center only shows the card until the next action.
 		// (A card drawn by this very action re-sets it inside the engine.

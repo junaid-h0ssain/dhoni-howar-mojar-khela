@@ -6,7 +6,7 @@
 // Polling has no half-open sockets, so turns only advance on real actions
 // (or explicit leave). isConnected stays true; lastSeen is informational.
 
-import type { GameState, Player, Tile, TileType, GameSettings } from '$lib/constants/boardData';
+import type { GameState, Player, Tile, TileType, GameSettings, FeedItem } from '$lib/constants/boardData';
 import { CHANCE_CARDS, CHEST_CARDS, cardTone, type Card } from '$lib/constants/cards';
 
 export const START_CASH = 1500;
@@ -192,13 +192,91 @@ export interface RoomState {
 	chancePos: number;
 	chestPos: number;
 	lastSeen: Record<string, number>;
+	/** Per-player timestamp (epoch ms) of the last accepted reaction/chat. Server-side only. */
+	lastReactAt: Record<string, number>;
+}
+
+// --- Social feed (emoji reactions + chat) ---
+
+export const EMOJI_ALLOWLIST = ['😂', '😭', '😡', '🎉', '👍', '👏', '🔥', '💸'] as const;
+export const REACT_COOLDOWN_MS = 3000;
+export const FEED_MAX = 20;
+/** Reactions float by and expire fast; chat lines linger longer. */
+export const REACTION_TTL_MS = 30_000;
+export const CHAT_TTL_MS = 5 * 60_000;
+export const CHAT_MAX_LEN = 140;
+
+function feedUid(): string {
+	try {
+		return crypto.randomUUID();
+	} catch {
+		return `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+	}
+}
+
+/** Drop expired items and cap length. Idempotent — safe to call on every read. */
+export function pruneFeed(s: GameState, nowMs = Date.now()): void {
+	const feed = s.reactions ?? [];
+	if (feed.length === 0) return;
+	s.reactions = feed
+		.filter((f) => {
+			const ttl = f.kind === 'text' ? CHAT_TTL_MS : REACTION_TTL_MS;
+			return nowMs - f.at < ttl;
+		})
+		.slice(-FEED_MAX);
+}
+
+function pushFeed(rs: RoomState, p: Player, kind: 'emoji' | 'text', body: string): void {
+	const s = rs.state;
+	pruneFeed(s);
+	const feed = (s.reactions ??= []);
+	feed.push({
+		id: feedUid(), playerId: p.id, playerName: p.name, kind, body, at: Date.now()
+	});
+	while (feed.length > FEED_MAX) feed.shift();
+}
+
+function checkReactCooldown(rs: RoomState, playerId: string): void {
+	// Old KV snapshots predate lastReactAt — heal in place.
+	const seen = (rs.lastReactAt ??= {});
+	const last = seen[playerId] ?? 0;
+	const wait = REACT_COOLDOWN_MS - (Date.now() - last);
+	if (wait > 0) {
+		throw errEngine('RATE_LIMITED', `আর ${Math.ceil(wait / 1000)} সেকেন্ড পরে আবার পাঠান।`);
+	}
+	rs.lastReactAt[playerId] = Date.now();
+}
+
+/** Quick emoji reaction — allowed in lobby, game, and finished rooms. Never touches turn state. */
+export function sendReaction(rs: RoomState, playerId: string, emoji: string): void {
+	const s = rs.state;
+	const p = findPlayer(s, playerId);
+	if (!p) throw errEngine('PLAYER_NOT_FOUND', 'খেলোয়াড় পাওয়া যায়নি।');
+	if (p.isBankrupt) throw errEngine('BANKRUPT', 'আপনি দেউলিয়া হয়ে গেছেন।');
+	if (!(EMOJI_ALLOWLIST as readonly string[]).includes(emoji)) {
+		throw errEngine('INVALID_EMOJI', 'এই ইমোজি পাঠানো যাবে না।');
+	}
+	checkReactCooldown(rs, playerId);
+	pushFeed(rs, p, 'emoji', emoji);
+}
+
+/** Short chat message — same pipe as reactions, text kind. Same 3s cooldown. */
+export function sendChat(rs: RoomState, playerId: string, text: string): void {
+	const s = rs.state;
+	const p = findPlayer(s, playerId);
+	if (!p) throw errEngine('PLAYER_NOT_FOUND', 'খেলোয়াড় পাওয়া যায়নি।');
+	if (p.isBankrupt) throw errEngine('BANKRUPT', 'আপনি দেউলিয়া হয়ে গেছেন।');
+	const body = text.trim().slice(0, CHAT_MAX_LEN);
+	if (!body) throw errEngine('EMPTY_MESSAGE', 'খালি বার্তা পাঠানো যাবে না।');
+	checkReactCooldown(rs, playerId);
+	pushFeed(rs, p, 'text', body);
 }
 
 export function newGame(roomId: string, hostId: string, settings?: unknown): GameState {
 	return {
 		roomId, hostId, status: 'LOBBY', currentTurnPlayerId: '',
 		dice: [1, 1], turnPhase: 'ROLL', tiles: newBoard(), players: [], logs: [],
-		settings: sanitizeSettings(settings)
+		settings: sanitizeSettings(settings), reactions: []
 	};
 }
 
@@ -208,7 +286,7 @@ export function newRoomState(roomId: string, hostId: string): RoomState {
 		version: 1, doublesCount: 0,
 		chanceDeck: shuffledDeck(CHANCE_CARDS.length),
 		chestDeck: shuffledDeck(CHEST_CARDS.length),
-		chancePos: 0, chestPos: 0, lastSeen: {}
+		chancePos: 0, chestPos: 0, lastSeen: {}, lastReactAt: {}
 	};
 }
 
