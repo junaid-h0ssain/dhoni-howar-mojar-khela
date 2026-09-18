@@ -82,6 +82,19 @@ export interface GameState {
     playerId: string;
     turnPlayerId: string;
   };
+  /** Social feed: emoji reactions + chat. Absent on older snapshots — treat as []. */
+  reactions?: FeedItem[];
+}
+
+/** One social feed entry: a quick emoji reaction or a short chat message. */
+export interface FeedItem {
+	id: string;
+	playerId: string;
+	playerName: string;
+	kind: 'emoji' | 'text';
+	body: string;
+	/** Epoch ms when the server accepted it. */
+	at: number;
 }
 
 /** Client → server action types (§9). */

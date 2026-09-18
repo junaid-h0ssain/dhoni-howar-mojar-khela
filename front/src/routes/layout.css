@@ -60,6 +60,24 @@
 	}
 }
 
+@keyframes react-float {
+	0% {
+		transform: translateY(0) scale(0.6);
+		opacity: 0;
+	}
+	12% {
+		opacity: 1;
+		transform: translateY(-14px) scale(1.15);
+	}
+	75% {
+		opacity: 1;
+	}
+	100% {
+		transform: translateY(-120px) scale(1);
+		opacity: 0;
+	}
+}
+
 @keyframes turn-pulse {
 	0%,
 	100% {
@@ -99,6 +117,9 @@
 .anim-float-slow {
 	animation: float-slow 5s ease-in-out infinite;
 }
+.anim-react-float {
+	animation: react-float 4s ease-out both;
+}
 .anim-turn-pulse {
 	animation: turn-pulse 1.6s ease-in-out infinite;
 }
@@ -113,6 +134,7 @@
 	.anim-log-in,
 	.anim-modal-in,
 	.anim-float-slow,
+	.anim-react-float,
 	.anim-turn-pulse,
 	.anim-trophy,
 	.anim-glow-drift {

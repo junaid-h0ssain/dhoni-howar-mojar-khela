@@ -6,7 +6,8 @@ import { newPerf, finishPerf } from '$lib/server/perf';
 
 const ACTIONS: ActionType[] = [
 	'START_GAME', 'ROLL_DICE', 'BUY_PROPERTY', 'BUILD_HOUSE',
-	'END_TURN', 'PAY_JAIL_FINE', 'USE_JAIL_CARD', 'UPDATE_SETTINGS'
+	'END_TURN', 'PAY_JAIL_FINE', 'USE_JAIL_CARD', 'UPDATE_SETTINGS',
+	'SEND_REACTION', 'SEND_CHAT'
 ];
 
 export const POST: RequestHandler = async ({ params, request }) => {
