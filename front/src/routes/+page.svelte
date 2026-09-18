@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import Lobby from '$lib/components/Lobby.svelte';
 	import BoardCanvas from '$lib/components/BoardCanvas.svelte';
 	import ActionPanel from '$lib/components/ActionPanel.svelte';
@@ -34,8 +34,13 @@
 	let actionGif: ActionGifData | null = $state(null);
 	// Chat sound anchor: ids of feed items already processed. Same silent-
 	// anchor pattern as logs so joining mid-game never pings for history.
-	let lastSeenChatIds = $state<Set<string>>(new Set());
-	let chatWatchRoom: string | null = $state(null);
+	// Plain (non-reactive) state on purpose: the watcher below both reads
+	// and writes this on every run, and a reactive Set would re-trigger
+	// the effect forever (new object identity each run = tight loop that
+	// freezes the UI). The effect still re-runs on every poll because it
+	// reads gameStore.gameState?.reactions.
+	let lastSeenChatIds = new Set<string>();
+	let chatWatchRoom: string | null = null;
 
 	function handleLeave() {
 		selectedTile = null;
@@ -76,25 +81,31 @@
 		const logs = gameStore.gameState?.logs;
 		if (!logs) return;
 		const roomId = gameStore.gameState?.roomId ?? null;
-		if (!logWatchInit || roomId !== logWatchRoom) {
-			// First sight or a different room: anchor silently so joining
-			// mid-game never blasts audio for old entries.
-			logWatchInit = true;
-			logWatchRoom = roomId;
-			lastSeenLog = logs.length > 0 ? logs[logs.length - 1] : null;
-			return;
-		}
-		let fresh: string[];
-		if (lastSeenLog == null) {
-			fresh = logs.slice();
-		} else {
-			const idx = logs.lastIndexOf(lastSeenLog);
-			// Anchor gone (trimmed past the 100-entry cap between polls):
-			// resync silently instead of replaying the whole window.
-			fresh = idx < 0 ? [] : logs.slice(idx + 1);
-		}
-		lastSeenLog = logs.length > 0 ? logs[logs.length - 1] : lastSeenLog;
-		if (fresh.length === 0) return;
+		// Anchor bookkeeping is untracked: these are primitives (same-value
+		// writes don't retrigger), but untrack guarantees this effect only
+		// ever re-runs on fresh server state, never on its own writes.
+		const fresh = untrack(() => {
+			if (!logWatchInit || roomId !== logWatchRoom) {
+				// First sight or a different room: anchor silently so joining
+				// mid-game never blasts audio for old entries.
+				logWatchInit = true;
+				logWatchRoom = roomId;
+				lastSeenLog = logs.length > 0 ? logs[logs.length - 1] : null;
+				return null;
+			}
+			let f: string[];
+			if (lastSeenLog == null) {
+				f = logs.slice();
+			} else {
+				const idx = logs.lastIndexOf(lastSeenLog);
+				// Anchor gone (trimmed past the 100-entry cap between polls):
+				// resync silently instead of replaying the whole window.
+				f = idx < 0 ? [] : logs.slice(idx + 1);
+			}
+			lastSeenLog = logs.length > 0 ? logs[logs.length - 1] : lastSeenLog;
+			return f;
+		});
+		if (!fresh || fresh.length === 0) return;
 		if (fresh.some((l) => l.includes('পাশা ফেলেছেন'))) playDiceRoll();
 		if (fresh.some((l) => l.includes('জোড়া পেয়েছেন'))) playDouble();
 		if (
@@ -131,16 +142,21 @@
 		const items = gameStore.gameState?.reactions ?? [];
 		const me = gameStore.playerId;
 		if (!roomId) return;
-		if (roomId !== chatWatchRoom) {
-			// First sight or a different room: anchor silently.
-			chatWatchRoom = roomId;
+		// Bookkeeping reads/writes plain non-reactive vars — untrack keeps
+		// it that way even if someone makes them $state later.
+		const freshChat = untrack(() => {
+			if (roomId !== chatWatchRoom) {
+				// First sight or a different room: anchor silently.
+				chatWatchRoom = roomId;
+				lastSeenChatIds = new Set(items.map((f) => f.id));
+				return [];
+			}
+			const fresh = items.filter(
+				(f) => f.kind === 'text' && !lastSeenChatIds.has(f.id)
+			);
 			lastSeenChatIds = new Set(items.map((f) => f.id));
-			return;
-		}
-		const freshChat = items.filter(
-			(f) => f.kind === 'text' && !lastSeenChatIds.has(f.id)
-		);
-		lastSeenChatIds = new Set(items.map((f) => f.id));
+			return fresh;
+		});
 		if (freshChat.length === 0 || document.hidden) return;
 		if (freshChat.some((f) => f.playerId !== me)) playChat();
 	});
