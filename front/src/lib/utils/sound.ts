@@ -71,7 +71,6 @@ const SAMPLES = [
 	'/sounds/jail.mp3',
 	'/sounds/buy-property.mp3',
 	'/sounds/bankruptcy.mp3',
-	'/sounds/jail-2.mp3',
 	'/sounds/chat.mp3',
 	'/sounds/income-tax.mp3',
 	'/sounds/luxury-tax.mp3'
@@ -285,9 +284,12 @@ export function playBankrupt(): void {
 	playSample('/sounds/bankruptcy.mp3', 0.65, withSynth(synthBankrupt));
 }
 
-/** Jail release: file, else an ascending "unlocked!" synth arpeggio. */
+/** Jail release: synth-only ascending "unlocked!" arpeggio (no sample file). */
 export function playJailRelease(): void {
-	playSample('/sounds/jail-2.mp3', 0.65, withSynth(synthJailRelease));
+	if (muted) return;
+	const c = ac();
+	if (!c) return;
+	synthJailRelease(c);
 }
 
 /** Chat message ping: file, else a soft two-tone sine blip. */
