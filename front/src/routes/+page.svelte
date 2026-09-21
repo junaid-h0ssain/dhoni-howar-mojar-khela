@@ -29,7 +29,7 @@
 	let lastSeenLog: string | null = $state(null);
 	let logWatchInit = $state(false);
 	let logWatchRoom: string | null = $state(null);
-	// Center-overlay GIF for big moments (buy, bankrupt, double, win).
+	// Center-overlay GIF for big moments (bankrupt, jail, double).
 	// Set from the same fresh-log batch as sounds; auto-dismisses.
 	let actionGif: ActionGifData | null = $state(null);
 	// Chat sound anchor: ids of feed items already processed. Same silent-
@@ -125,7 +125,7 @@
 		// two bills get their own sounds.
 		if (fresh.some((l) => l.includes('আয়কর দিয়েছেন'))) playIncomeTax();
 		if (fresh.some((l) => l.includes('বিলাস কর দিয়েছেন'))) playLuxuryTax();
-		// GIF overlay: single winner per batch (bankrupt > win > buy >
+		// GIF overlay: single winner per batch (bankrupt > jail >
 		// double), silent no-op when no gif matches. Skip while backgrounded.
 		if (!document.hidden) {
 			const gif = gifForLogs(fresh);

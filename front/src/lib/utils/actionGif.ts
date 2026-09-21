@@ -21,10 +21,6 @@ const RULES: Array<{ match: (logs: string[]) => string | undefined; gif: ActionG
 		gif: { src: '/gifs/jail.gif', caption: 'জেল! 🔒' }
 	},
 	{
-		match: (logs) => logs.find((l) => l.includes('কিনেছেন')),
-		gif: { src: '/gifs/buy-property.gif', caption: 'সম্পত্তি কেনা হয়েছে! 💰' }
-	},
-	{
 		match: (logs) => logs.find((l) => l.includes('জোড়া পেয়েছেন')),
 		gif: { src: '/gifs/dice-6.gif', caption: 'জোড়া ছক্কা! 🎲' }
 	}
@@ -45,7 +41,6 @@ export function preloadGifs(): void {
 		if (typeof window === 'undefined') return;
 		for (const src of [
 			'/gifs/bankruptcy.gif',
-			'/gifs/buy-property.gif',
 			'/gifs/dice-6.gif',
 			'/gifs/jail.gif'
 		]) {
